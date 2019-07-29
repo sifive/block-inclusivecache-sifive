@@ -1,9 +1,9 @@
-global def blockInclusiveCacheSifiveRoot = simplify "{here}/.."
+global def blockInclusiveCacheSifiveRoot = simplify "{here}/../.."
 
 global def inclusiveCacheScalaModule =
   def name = "inclusiveCache"
   def scalaVersion = rocketchipScalaModule.getScalaModuleScalaVersion
-  def dir = "{blockInclusiveCacheSifiveRoot}/craft/inclusivecache"
+  def dir = "{blockInclusiveCacheSifiveRoot}/design/craft/inclusivecache"
   makeScalaModule name dir scalaVersion
   | setScalaModuleSourceDirs ("src", Nil)
   | setScalaModuleResourceDirs ("resources", Nil)
