@@ -1,0 +1,53 @@
+language: scala
+scala:
+  - 2.12.8
+
+os:
+  - osx
+  - linux
+
+addons:
+  homebrew:
+    packages:
+    - gmp
+    - re2
+    - pkgconfig
+    - python3
+    - libtool
+    - protobuf
+  apt:
+    packages:
+    - libre2-dev
+    - python3-pip
+    - makedev
+    - fuse
+    - libfuse-dev
+    - libsqlite3-dev
+    - libgmp-dev
+    - libncurses5-dev
+    - pkg-config
+    - git
+    - g++
+    - gcc
+    - libtool-bin
+    - protobuf-compiler
+
+install:
+  - mkdir repos
+  - cd repos
+  - git clone https://github.com/sifive/block-inclusivecache-sifive.git
+  - git clone https://github.com/chipsalliance/rocket-chip.git
+  - git clone https://github.com/ucb-bar/berkeley-hardfloat.git
+  - git clone https://github.com/sifive/api-chisel3-sifive.git
+  - git clone https://github.com/freechipsproject/chisel3.git
+  - git clone https://github.com/sifive/api-firrtl-sifive.git
+  - git clone https://github.com/sifive/api-scala-sifive.git
+  - git clone https://github.com/sifive/wit.git
+  - git clone https://github.com/freechipsproject/firrtl.git
+  - git clone https://github.com/sifive/rocket-chip-wake.git
+  - cd ..
+
+before_script:
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then ./continuous-integration/travis/install_deps.sh; fi
+
+script: ./continuous-integration/travis/regress.sh
