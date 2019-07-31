@@ -33,9 +33,9 @@ addons:
     - protobuf-compiler
 
 install:
-  - mkdir repos
+  - mkdir -p repos/block-inclusivecache-sifive
+  - git clone $PWD repos/block-inclusivecache-sifive
   - cd repos
-  - git clone https://github.com/sifive/block-inclusivecache-sifive.git
   - git clone https://github.com/chipsalliance/rocket-chip.git
   - git clone https://github.com/ucb-bar/berkeley-hardfloat.git
   - git clone https://github.com/sifive/api-chisel3-sifive.git
