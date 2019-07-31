@@ -32,6 +32,7 @@ addons:
     - libtool-bin
     - protobuf-compiler
 
+# clone all packages using https beforehand, so we dont need to worry about ssh
 install:
   - mkdir -p repos/block-inclusivecache-sifive
   - git clone $PWD repos/block-inclusivecache-sifive
@@ -50,4 +51,4 @@ install:
 before_script:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then ./continuous-integration/travis/install_deps.sh; fi
 
-script: ./continuous-integration/travis/regress.sh
+script: ./continuous-integration/travis/test.sh
