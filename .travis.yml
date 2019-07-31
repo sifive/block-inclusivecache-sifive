@@ -48,7 +48,7 @@ install:
   - cd ..
 
 before_script:
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then ./continuous-integration/travis/install_deps_osx.sh; fi
-  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./continuous-integration/travis/install_deps_linux.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then source continuous-integration/travis/install_deps_osx.sh; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then source continuous-integration/travis/install_deps_linux.sh; fi
 
 script: ./continuous-integration/travis/test.sh
