@@ -2,14 +2,12 @@
 
 echo "Install Wit/Wake"
 
-git clone https://github.com/sifive/wit.git
-export PATH=$PATH:$PWD/wit
+export PATH=$PATH:$PWD/repos/wit
 
 export USE_FUSE_WAKE=0
-rm -r wake # temporary solution to duplicate naming issue
 git clone https://github.com/sifive/wake.git
 cd wake
-git checkout v0.15
+git checkout v0.15.1
 make
 export PATH=$PATH:$PWD/bin
 
@@ -23,8 +21,6 @@ wit update
 
 wake --init .
 
-cd block-inclusivecache-sifive
-
-echo "compile scala"
+echo "Compile Scala"
 
 wake -j1 -v compileScalaModule inclusiveCacheScalaModule
