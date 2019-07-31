@@ -1,11 +1,13 @@
 #!/bin/sh -x
 
-export PATH=$PATH:$PWD/repos/wit
 export WAKE_PATH=$PATH
 
 echo "Initialize Workspace"
 
-wit --repo-path $PWD/repos init workspace -a block-inclusivecache-sifive
+commit=$(git rev-parse HEAD)
+
+git config --global url."https://github.com/".insteadOf 'git@github.com:'
+wit init workspace -a git@github.com:sifive/block-inclusivecache-sifive.git::$commit
 cd workspace/
 wit add-pkg https://github.com/sifive/environment-example-sifive.git
 wit update
