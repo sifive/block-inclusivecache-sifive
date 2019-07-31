@@ -11,6 +11,7 @@ addons:
     packages:
     - gmp
     - re2
+    - re2c
     - pkgconfig
     - python3
     - libtool

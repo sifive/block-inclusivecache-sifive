@@ -14,4 +14,4 @@ wake --init .
 
 echo "Compile Scala"
 
-wake -j1 -v 'compileScalaModule inclusiveCacheScalaModule | getPathResult'
+wake --no-tty -j1 -v 'compileScalaModule inclusiveCacheScalaModule | getPathResult'
