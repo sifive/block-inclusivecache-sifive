@@ -1,6 +1,7 @@
 #!/bin/sh -x
 
 export PATH=$PATH:$PWD/repos/wit
+export WAKE_PATH=$PATH
 
 echo "Initialize Workspace"
 
@@ -13,4 +14,4 @@ wake --init .
 
 echo "Compile Scala"
 
-wake -j1 -v compileScalaModule inclusiveCacheScalaModule
+wake -j1 -v 'compileScalaModule inclusiveCacheScalaModule | getPathResult'

@@ -30,7 +30,6 @@ addons:
     - g++
     - gcc
     - libtool-bin
-    - protobuf-compiler
 
 # clone all packages using https beforehand, so we dont need to worry about ssh
 install:
