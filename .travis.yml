@@ -18,6 +18,8 @@ addons:
     - python3
     - libtool
     - protobuf
+    casks:
+    - osxfuse
   apt:
     packages:
     - libre2-dev
