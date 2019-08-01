@@ -3,10 +3,10 @@
 echo "Installing Wake"
 
 git clone https://github.com/sifive/wake.git
-git -C wake checkout v0.15.1
-make -C wake
-export PATH=$PATH:$PWD/wake/bin
-
+cd wake
+git checkout v0.15.1
+make && ./bin/wake 'install "/usr/local"'
+cd ..
 
 echo "Installing Wit"
 
