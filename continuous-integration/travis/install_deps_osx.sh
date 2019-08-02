@@ -2,7 +2,7 @@
 
 echo "Installing Wake"
 
-git clone --branch v0.15.1 https://github.com/sifive/wake.git
+git clone --branch old-osx https://github.com/sifive/wake.git
 make -C wake
 export PATH=$PATH:$PWD/wake/bin
 
