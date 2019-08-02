@@ -20,8 +20,7 @@ addons:
     - protobuf
     casks:
     - osxfuse
-    update:
-    - true
+    update: true
   apt:
     packages:
     - libre2-dev
