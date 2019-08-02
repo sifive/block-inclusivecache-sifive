@@ -9,7 +9,7 @@ os:
 osx_image: xcode9.2
 
 before_cache:
-  - brew cleanup
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew cleanup; fi
 
 cache:
   directories:
@@ -20,9 +20,7 @@ addons:
     packages:
     - gmp
     - re2
-    - re2c
     - pkgconfig
-    - python3
     - libtool
     - protobuf
     casks:
