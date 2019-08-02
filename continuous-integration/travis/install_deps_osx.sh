@@ -2,8 +2,7 @@
 
 echo "Installing Wake"
 
-export USE_FUSE_WAKE=0
-git clone --branch mac-use-fuse-wake https://github.com/sifive/wake.git
+git clone --branch v0.15.1 https://github.com/sifive/wake.git
 make -C wake
 export PATH=$PATH:$PWD/wake/bin
 

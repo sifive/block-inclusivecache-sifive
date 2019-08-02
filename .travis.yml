@@ -6,7 +6,7 @@ os:
   - osx
   - linux
 
-osx_image: xcode10.2
+osx_image: xcode9.2
 
 addons:
   homebrew:
@@ -20,6 +20,8 @@ addons:
     - protobuf
     casks:
     - osxfuse
+    update:
+    - true
   apt:
     packages:
     - libre2-dev
