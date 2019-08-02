@@ -8,6 +8,13 @@ os:
 
 osx_image: xcode9.2
 
+before_cache:
+  - brew cleanup
+
+cache:
+  directories:
+  - $HOME/Library/Caches/Homebrew
+
 addons:
   homebrew:
     packages:
