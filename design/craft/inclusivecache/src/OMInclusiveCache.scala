@@ -37,4 +37,5 @@ case class OMInclusiveCache (
   def interrupts() = Nil
   def dataECC = None
   def tagECC = None
+  def memories = Nil
 }
