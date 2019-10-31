@@ -3,29 +3,9 @@ scala:
   - 2.12.8
 
 os:
-  - osx
   - linux
 
-osx_image: xcode9.2
-
-before_cache:
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew cleanup; fi
-
-cache:
-  directories:
-  - $HOME/Library/Caches/Homebrew
-
 addons:
-  homebrew:
-    packages:
-    - gmp
-    - re2
-    - pkgconfig
-    - libtool
-    - protobuf
-    casks:
-    - osxfuse
-    update: true
   apt:
     packages:
     - libre2-dev
@@ -43,7 +23,6 @@ addons:
     - libtool-bin
 
 install:
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then source continuous-integration/travis/install_deps_osx.sh; fi
-  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then source continuous-integration/travis/install_deps_linux.sh; fi
+  - source continuous-integration/travis/install_deps_linux.sh
 
 script: ./continuous-integration/travis/test.sh
