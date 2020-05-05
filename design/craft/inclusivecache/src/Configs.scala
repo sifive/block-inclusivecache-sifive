@@ -56,8 +56,10 @@ class WithInclusiveCache(
       memCycles = outerLatencyCycles,
       writeBytes = site(XLen)/8,
       portFactor = subBankingFactor)
-  case BankedL2Key => up(BankedL2Key, site).copy(nBanks = nBanks, coherenceManager = { subsystem =>
-    implicit val p = subsystem.p
+  case BankedL2Key => up(BankedL2Key, site).copy(nBanks = nBanks, coherenceManager = { context =>
+    implicit val p = context.p
+    val sbus = context.tlBusWrapperLocationMap(SBUS)
+    val cbus = context.tlBusWrapperLocationMap.lift(CBUS).getOrElse(sbus)
     val InclusiveCacheParams(
       ways,
       sets,
@@ -75,8 +77,8 @@ class WithInclusiveCache(
         level = 2,
         ways = ways,
         sets = sets,
-        blockBytes = subsystem.sbus.blockBytes,
-        beatBytes = subsystem.sbus.beatBytes),
+        blockBytes = sbus.blockBytes,
+        beatBytes = sbus.beatBytes),
       InclusiveCacheMicroParameters(
         writeBytes = writeBytes,
         portFactor = portFactor,
@@ -85,9 +87,9 @@ class WithInclusiveCache(
         outerBuf = bufOuterInterior),
       Some(InclusiveCacheControlParameters(
         address = InclusiveCacheParameters.L2ControlAddress,
-        beatBytes = subsystem.cbus.beatBytes))))
+        beatBytes = cbus.beatBytes))))
 
-    subsystem.addLogicalTreeNode(l2.logicalTreeNode)
+    context.addLogicalTreeNode(l2.logicalTreeNode)
 
     def skipMMIO(x: TLClientParameters) = {
       val dcacheMMIO =
@@ -114,16 +116,16 @@ class WithInclusiveCache(
     physicalFilter match {
       case None => lastLevelNode :*= l2_outer_buffer.node
       case Some(fp) => {
-        val physicalFilter = LazyModule(new PhysicalFilter(fp.copy(controlBeatBytes = subsystem.cbus.beatBytes)))
+        val physicalFilter = LazyModule(new PhysicalFilter(fp.copy(controlBeatBytes = cbus.beatBytes)))
         lastLevelNode :*= physicalFilter.node :*= l2_outer_buffer.node
-        physicalFilter.controlNode := subsystem.cbus.coupleTo("physical_filter") {
-          TLBuffer(1) := TLFragmenter(subsystem.cbus) := _
+        physicalFilter.controlNode := cbus.coupleTo("physical_filter") {
+          TLBuffer(1) := TLFragmenter(cbus) := _
         }
       }
     }
 
     l2.ctlnode.foreach {
-      _ := subsystem.cbus.coupleTo("l2_ctrl") { TLBuffer(1) := TLFragmenter(subsystem.cbus) := _ }
+      _ := cbus.coupleTo("l2_ctrl") { TLBuffer(1) := TLFragmenter(cbus) := _ }
     }
 
     ElaborationArtefacts.add("l2.json", l2.module.json)
