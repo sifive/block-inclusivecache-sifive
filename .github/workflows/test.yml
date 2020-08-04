@@ -1,0 +1,64 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Wake 0.18 scala compile
+    runs-on: ubuntu-latest
+    env:
+      # $WIT_WORKSPACE path is relative to $GITHUB_WORKSPACE
+      WIT_WORKSPACE: wit-workspace
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        path: wit-packages/ci-root-package
+        # Fetch all history and tags
+        fetch-depth: 0
+
+    - name: 'Wit Init'
+      uses: sifive/wit/actions/wit@v0.13.1
+      with:
+        command: init
+        arguments: |
+          ${{ env.WIT_WORKSPACE }}
+          -a ./wit-packages/ci-root-package
+        force_github_https: true
+
+    - name: Run wake-based scala build
+      working-directory: ${{ env.WIT_WORKSPACE }}
+      run: |
+        set -euxo pipefail
+        # Take back ownership of wit workspace, since it was created while
+        # under a Docker container and permissions default to root.
+        sudo chown -R $(id -u):$(id -g) .
+        # Install protobuf
+        mkdir protoc
+        cd protoc
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-linux-x86_64.zip
+        unzip protoc-3.7.1-linux-x86_64.zip
+        cd ..
+        # Install Wake
+        curl -L -o /tmp/wake.deb https://github.com/sifive/wake/releases/download/v0.18.1/ubuntu-18-04-wake_0.18.1-1_amd64.deb && \
+            sudo dpkg -i /tmp/wake.deb && \
+            rm /tmp/wake.deb
+        # Run the scala compilation API
+        WAKE_PATH=$PATH:$PWD/protoc/bin wake -x 'compileScalaModule inclusiveCacheScalaModule | getPathResult'
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Run lint check
+      run: |
+        set +e  # GitHub defaults to -e, but we want to do our own error handling
+        if matching_files=$(grep --files-with-matches '\s\+$' *); then
+          echo "Trailing whitespace detected. Please remove trailing whitespace in the following files:"
+          echo
+          echo "$matching_files"
+          exit 1
+        fi
