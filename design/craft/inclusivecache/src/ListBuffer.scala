@@ -42,13 +42,22 @@ class ListBuffer[T <: Data](params: ListBufferParameters[T]) extends Module
     val data  = params.gen.asOutput
   }
 
+  // queues估计是总共有多少queue
+  // entrys是总共有多少entry
+  // 然后每个entry就是T
+  // 哪几个queue是valid的？
   val valid = RegInit(UInt(0, width=params.queues))
+  // 每个queue的head还有tail
   val head  = Mem(params.queues, UInt(width = params.entryBits))
   val tail  = Mem(params.queues, UInt(width = params.entryBits))
+  // 但是这边的used, next, data为啥只有entries个呢？有可能是所有mshr共享entries的？
   val used  = RegInit(UInt(0, width=params.entries))
+  // 这个怎么有一种链表的感觉？
   val next  = Mem(params.entries, UInt(width = params.entryBits))
+  // 这个才是最终的data
   val data  = Mem(params.entries, params.gen)
 
+  // 这边算出哪一项是free的？
   val freeOH = ~(leftOR(~used) << 1) & ~used
   val freeIdx = OHToUInt(freeOH)
 
@@ -57,13 +66,19 @@ class ListBuffer[T <: Data](params: ListBufferParameters[T]) extends Module
   val used_set  = Wire(init = UInt(0, width=params.entries))
   val used_clr  = Wire(init = UInt(0, width=params.entries))
 
+  // 当前队列的队尾
   val push_tail = tail.read(io.push.bits.index)
+  // 这个是说，假如原来这个队列已经是valid的了，那就是拓展队列
   val push_valid = valid(io.push.bits.index)
 
+  // 看是否还有空的entry
   io.push.ready := !used.andR()
   when (io.push.fire()) {
+    // 进入哪个queue
     valid_set := UIntToOH(io.push.bits.index, params.queues)
+    // 需要把valid的哪一位，set的哪一位给set
     used_set := freeOH
+    // 数据局写入
     data.write(freeIdx, io.push.bits.data)
     when (push_valid) {
       next.write(push_tail, freeIdx)

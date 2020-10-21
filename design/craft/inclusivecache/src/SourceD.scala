@@ -29,12 +29,19 @@ class SourceDRequest(params: InclusiveCacheParameters) extends FullRequest(param
   val sink = UInt(width = params.inner.bundle.sinkBits)
   val way  = UInt(width = params.wayBits)
   val bad  = Bool()
+  override def dump() = {
+    DebugPrint("SourceDRequest: prio: %x control: %b opcode: %x param: %x size: %x source: %x tag: %x set: %x offset: %x put: %x sink: %x way: %x bad: %b\n",
+      prio.asUInt, control, opcode, param, size, source, tag, set, offset, put, sink, way, bad)
+  }
 }
 
 class SourceDHazard(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val set = UInt(width = params.setBits)
   val way = UInt(width = params.wayBits)
+  def dump() = {
+    DebugPrint("SourceDHazard: set: %x way: %x\n", set, way)
+  }
 }
 
 class PutBufferACEntry(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
@@ -42,9 +49,12 @@ class PutBufferACEntry(params: InclusiveCacheParameters) extends InclusiveCacheB
   val data = UInt(width = params.inner.bundle.dataBits)
   val mask = UInt(width = params.inner.bundle.dataBits/8)
   val corrupt = Bool()
+  def dump() = {
+    DebugPrint("PutBufferACEntry: data: %x mask: %x corrupt: %b\n", data, mask, corrupt)
+  }
 }
 
-class SourceD(params: InclusiveCacheParameters) extends Module
+class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val req = Decoupled(new SourceDRequest(params)).flip
@@ -67,7 +77,78 @@ class SourceD(params: InclusiveCacheParameters) extends Module
     val grant_safe = Bool()
   }
 
+  when (io.req.fire()) {
+    DebugPrint("SourceD req:")
+    io.req.bits.dump()
+  }
+
+  when (io.d.fire()) {
+    DebugPrint("inner grant:")
+    io.d.bits.dump
+  }
+
+  when (io.pb_pop.fire()) {
+    DebugPrint("SourceD pb_pop:")
+    io.pb_pop.bits.dump()
+  }
+
+  /*
+  DebugPrint("SourceD pb_beat:")
+  io.pb_beat.dump()
+  */
+
+  when (io.rel_pop.fire()) {
+    DebugPrint("SourceD rel_pop:")
+    io.rel_pop.bits.dump()
+  }
+
+  /*
+  DebugPrint("SourceD rel_beat:")
+  io.rel_beat.dump()
+  */
+
+  when (io.bs_radr.fire()) {
+    DebugPrint("SourceD bs_radr:")
+    io.bs_radr.bits.dump()
+  }
+
+  /*
+  DebugPrint("SourceD bs_rdat:")
+  io.bs_rdat.dump()
+  */
+
+
+  when (io.bs_wadr.fire()) {
+    DebugPrint("SourceD bs_wadr:")
+    io.bs_wadr.bits.dump()
+  }
+
+  /*
+  DebugPrint("SourceD bs_wdat:")
+  io.bs_wdat.dump()
+  */
+
+ /*
+  DebugPrint("SourceD evict_req:")
+  io.evict_req.dump()
+
+  when (io.evict_safe) {
+    DebugPrint("SourceD evict_safe\n")
+  }
+  */
+
+  /*
+  DebugPrint("SourceD grant_req:")
+  io.grant_req.dump()
+  */
+
+  when (io.grant_safe) {
+    DebugPrint("SourceD grant_safe\n")
+  }
+
+  // 总线宽度，暂时不知道是对内还是对外
   val beatBytes = params.inner.manager.beatBytes
+  // cache里面存储的粒度，最小的可读写的SRAM bank的宽度
   val writeBytes = params.micro.writeBytes
 
   val s1_valid = Wire(Bool())
@@ -77,9 +158,37 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   val s3_ready = Wire(Bool())
   val s4_ready = Wire(Bool())
 
+  // Acquire来的请求：
+  // 请求                        配套的从D通道走的消息有
+  // PutFullData Put 0           AccessAck 0
+  // PutPartialData Put 1        AccessAck 0
+  // ArithmeticData Atomic 2     AccessData 1
+  // LogicalData Atomic 3        AccessData 1
+
+  // Get Get 4                     AccessAckData 1
+  // Intent Intent 5               HintAck       2
+  // AcquireBlock Acquire 6        Grant 4 GrantData 5
+  // AcquirePerm Acquire 7         Grant 4
+
+  // C通道来的请求有：
+  // ProbeAck Probe 4
+  // ProbeAckData Probe 5
+  // Release Release 6  ReleaseAck 6
+  // ReleaseData Release 7 ReleaseAck   ReleaseAck 6
+
+  // 所以会从SourceD走的message有：
+  // AccessAck     0
+  // AccessAckData 1
+  // HintAck       2
+  // Grant         4
+  // GrantData     5
+  // ReleaseAck    6
+
+
   ////////////////////////////////////// STAGE 1 //////////////////////////////////////
   // Reform the request beats
 
+  // 所以这个其实就是阻塞的，一次只能处理一个请求
   val busy = RegInit(Bool(false))
   val s1_block_r = RegInit(Bool(false))
   val s1_counter = RegInit(UInt(0, width = params.innerBeatBits))
@@ -88,16 +197,49 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   val s1_x_bypass = Wire(UInt(width = beatBytes/writeBytes)) // might go from high=>low during stall
   val s1_latch_bypass = RegNext(!(busy || io.req.valid) || s2_ready)
   val s1_bypass = Mux(s1_latch_bypass, s1_x_bypass, RegEnable(s1_x_bypass, s1_latch_bypass))
+
+  // 这边的offset是啥，难道不应该直接就block对齐就可以了嘛？哪儿来的offset呢？
+  // mask gen是根据这个地址，要读的mask
+  // 然后s1 bypass是哪些数据可以bypass回来的mask
+  // 与一下之后，假如全部可以bypass，那就不用读了
   val s1_mask = MaskGen(s1_req.offset, s1_req.size, beatBytes, writeBytes) & ~s1_bypass
+  // 不需要任何操作，直接给response纠结可以的
+  // 这边的opcode似乎不是d的opcode，而是直接把请求的opcode传到这里，再来判断
   val s1_grant = (s1_req.opcode === AcquireBlock && s1_req.param === BtoT) || s1_req.opcode === AcquirePerm
+  // 只有acquire是prio 0
+  // Hint是不需要数据吗？
+  // put full data也是走的A通道，最终也会走D
+  // size小于writeBytes是在干啥？
+  //  哪些请求需要read data array呢？
+  //  首先是从A通道来的请求
+  //  C通道来的请求就不需要读吗？是的，因为C通道是没有mask的，肯定是full masked write
+  //  Hint是不需要读的，acquire假如是直接grant的，直接给权限那种，也是不需要读的
+  //  剩下需要读的就是：
+  //  Get，AcquireBlock（确实需要block的那种）,PutPartialData, ArithmeticData, LogicalData
+  //  PutFullData也是可能需要读的，当Put full data要写的内容粒度太小，比最小写粒度还要小的话，就需要先读一下
   val s1_need_r = s1_mask.orR && s1_req.prio(0) && s1_req.opcode =/= Hint && !s1_grant &&
                   (s1_req.opcode =/= PutFullData || s1_req.size < UInt(log2Ceil(writeBytes)))
+
+  // valid这个信号是用来控制要不要读data array的
+  // 所以这里是的几个条件是，首先在req.valid的当拍就可以开始读了，然后要一直busy
+  // 不对，在req valid的当拍读，不应该是在fire的时候读吗？
+  // 这个s1 block r应该是，假如后面s2那边没有及时读出来的数据处理了，那现在读出来的数据暂存在queue里面
+  // 然后这一拍就不用重复读了
   val s1_valid_r = (busy || io.req.valid) && s1_need_r && !s1_block_r
+  // s1_req.prio(0)即从A channel来的请求
+  // 如果是从A channel来的，那就要看opcode 2
+  // !s1_req.opcode(2)因为最高位是0的，都是write，包括了put，atomics
+  // 请求还有可能是从C来的
+  // 如果是从C来的,最后一位是1的，都是ProbeAckData和ReleaseData
   val s1_need_pb = Mux(s1_req.prio(0), !s1_req.opcode(2), s1_req.opcode(0)) // hasData
+  // 从A channel来的请求，只有Hint或者直接给权限的那种是一拍结束
+  // C通道来的请求只有Release是一拍结束
   val s1_single = Mux(s1_req.prio(0), s1_req.opcode === Hint || s1_grant, s1_req.opcode === Release)
   val s1_retires = !s1_single // retire all operations with data in s3 for bypass (saves energy)
   // Alternatively: val s1_retires = s1_need_pb // retire only updates for bypass (less backpressure from WB)
+  // 总共需要几beat
   val s1_beats1 = Mux(s1_single, UInt(0), UIntToOH1(s1_req.size, log2Up(params.cache.blockBytes)) >> log2Ceil(beatBytes))
+  // 前面的是算出开始是第几排，后面是配上现在传输到了第几拍
   val s1_beat = (s1_req.offset >> log2Ceil(beatBytes)) | s1_counter
   val s1_last = s1_counter === s1_beats1
   val s1_first = s1_counter === UInt(0)
@@ -106,6 +248,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   params.ccover(!s1_latch_bypass, "SOURCED_1_BYPASS_HOLD", "Bypass match successful, but stalled by stage 2")
   params.ccover((busy || io.req.valid) && !s1_need_r, "SOURCED_1_NO_MODIFY", "Transaction servicable without SRAM")
 
+  // 这边读数据要读多少拍呢？
   io.bs_radr.valid     := s1_valid_r
   io.bs_radr.bits.noop := Bool(false)
   io.bs_radr.bits.way  := s1_req.way
@@ -117,12 +260,14 @@ class SourceD(params: InclusiveCacheParameters) extends Module
 
   // Make a queue to catch BS readout during stalls
   val queue = Module(new Queue(io.bs_rdat, 3, flow=true))
+  // banked data store是延迟两拍后出数
   queue.io.enq.valid := RegNext(RegNext(io.bs_radr.fire()))
   queue.io.enq.bits := io.bs_rdat
   assert (!queue.io.enq.valid || queue.io.enq.ready)
 
   params.ccover(!queue.io.enq.ready, "SOURCED_1_QUEUE_FULL", "Filled SRAM skidpad queue completely")
 
+  // s1_block_r是用来干啥的呢？
   when (io.bs_radr.fire()) { s1_block_r := Bool(true) }
   when (io.req.valid) { busy := Bool(true) }
   when (s1_valid && s2_ready) {
@@ -136,7 +281,9 @@ class SourceD(params: InclusiveCacheParameters) extends Module
 
   params.ccover(s1_valid && !s2_ready, "SOURCED_1_STALL", "Stage 1 pipeline blocked")
 
+  // 这边估计就是不看req fire，而是直接看req valid就可以了。估计是valid等待ready。只要valid有效了，就肯定fire
   io.req.ready := !busy
+  // s1怎样算valid，busy，不需要读data或者可以读到banked store
   s1_valid := (busy || io.req.valid) && (!s1_valid_r || io.bs_radr.ready)
 
   ////////////////////////////////////// STAGE 2 //////////////////////////////////////
@@ -156,6 +303,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   val s2_pdata_raw = Wire(new PutBufferACEntry(params))
   val s2_pdata = s2_pdata_raw holdUnless s2_valid_pb
 
+  // 从SinkA和SinkC那里把put buffer的值拿出来
   s2_pdata_raw.data    := Mux(s2_req.prio(0), io.pb_beat.data, io.rel_beat.data)
   s2_pdata_raw.mask    := Mux(s2_req.prio(0), io.pb_beat.mask, ~UInt(0, width = params.inner.manager.beatBytes))
   s2_pdata_raw.corrupt := Mux(s2_req.prio(0), io.pb_beat.corrupt, io.rel_beat.corrupt)
@@ -179,11 +327,21 @@ class SourceD(params: InclusiveCacheParameters) extends Module
 
   params.ccover(s2_valid && !s3_ready, "SOURCED_2_STALL", "Stage 2 pipeline blocked")
 
+  // 我猜测s2 valid就是指s2的数据可以向下传了
   s2_valid := s2_full && (!s2_valid_pb || pb_ready)
+  // s2 ready是指s2现在可以接受请求了
+  // s2 full指的是s2现在是否有请求
+  // s2 latch就类似于是s2 fire
+  // s2 valid pb是指s2是否要读pb的数据
+  // 这边的ready的条件主要就是：
+  // 1. 要么当前stage没有数据
+  // 2. 要么是当前有数据，并且s3可以直接接受，即可以流水传下去
+  // 另外就是当等待pb时，不能ready
   s2_ready := !s2_full || (s3_ready && (!s2_valid_pb || pb_ready))
 
   ////////////////////////////////////// STAGE 3 //////////////////////////////////////
   // Send D response
+  // 在stage 3开始send response了
 
   val s3_latch = s2_valid && s3_ready
   val s3_full = RegInit(Bool(false))
@@ -197,9 +355,11 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   val s3_need_pb = RegEnable(s2_need_pb, s3_latch)
   val s3_retires = RegEnable(s2_retires, s3_latch)
   val s3_need_r = RegEnable(s2_need_r, s3_latch)
+  // 这个need bs，估计意思是要不要写data array？
   val s3_need_bs = s3_need_pb
   val s3_acq = s3_req.opcode === AcquireBlock || s3_req.opcode === AcquirePerm
 
+  // 这个就是个流水线，所以得处理数据的bypass
   // Collect s3's data from either the BankedStore or bypass
   // NOTE: we use the s3_bypass passed down from s1_bypass, because s2-s4 were guarded by the hazard checks and not stale
   val s3_bypass_data = Wire(UInt())
@@ -227,6 +387,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   d.bits.data    := s3_rdata
   d.bits.corrupt := s3_req.bad && d.bits.opcode(0)
 
+  // 数据是从queue里面出来的
   queue.io.deq.ready := s3_valid && s4_ready && s3_need_r
   assert (!s3_full || !s3_need_r || queue.io.deq.valid)
 
@@ -308,6 +469,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module
   val s7_dat  = RegEnable(s6_dat,  retire)
 
   ////////////////////////////////////// BYPASSS //////////////////////////////////////
+  // 这边的bypass是在哪些级之间进行bypass啊？
 
   // Manually retime this circuit to pull a register stage forward
   val pre_s3_req  = Mux(s3_latch, s2_req,  s3_req)

@@ -23,15 +23,28 @@ import freechips.rocketchip.tilelink._
 class SourceERequest(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val sink = UInt(width = params.outer.bundle.sinkBits)
+  def dump() = {
+    DebugPrint("SourceERequest: sink: %x\n", sink)
+  }
 }
 
-class SourceE(params: InclusiveCacheParameters) extends Module
+class SourceE(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val req = Decoupled(new SourceERequest(params)).flip
     val e = Decoupled(new TLBundleE(params.outer.bundle))
   }
 
+  when (io.req.fire()) {
+    DebugPrint("sourceE req ")
+    io.req.bits.dump
+  }
+
+  when (io.e.fire()) {
+    DebugPrint("outer finish ")
+    io.e.bits.dump
+  }
+    
   // ready must be a register, because we derive valid from ready
   require (!params.micro.outerBuf.e.pipe && params.micro.outerBuf.e.isDefined)
 

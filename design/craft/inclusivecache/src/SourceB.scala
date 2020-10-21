@@ -27,16 +27,31 @@ class SourceBRequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val tag     = UInt(width = params.tagBits)
   val set     = UInt(width = params.setBits)
   val clients = UInt(width = params.clientBits)
+  def dump() = {
+    DebugPrint("SourceBRequest: param: %x tag: %x set: %x clients: %x\n",
+      param, tag, set, clients)
+  }
 }
 
-class SourceB(params: InclusiveCacheParameters) extends Module
+class SourceB(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val req = Decoupled(new SourceBRequest(params)).flip
     val b = Decoupled(new TLBundleB(params.inner.bundle))
   }
 
+  when (io.b.fire()) {
+    DebugPrint("inner probe ")
+    io.b.bits.dump
+  }
+    
+  when (io.req.fire()) {
+    DebugPrint("sourceB req ")
+    io.req.bits.dump
+  }
+
   if (params.firstLevel) {
+    // 如果是firstLevel，肯定就不需要发送probe了
     // Tie off unused ports
     io.req.ready := Bool(true)
     io.b.valid := Bool(false)
@@ -47,7 +62,10 @@ class SourceB(params: InclusiveCacheParameters) extends Module
     remain := (remain | remain_set) & ~remain_clr
 
     val busy = remain.orR()
+    // 哪些是要处理的，如果有busy的话就用remain，否则就直接用clients
     val todo = Mux(busy, remain, io.req.bits.clients)
+    // next是随机选中的，下一个要处理的？
+    // 问题，为啥处处都是随机的呢？why？
     val next = ~(leftOR(todo) << 1) & todo
 
     if (params.clientBits > 1) {
@@ -57,6 +75,7 @@ class SourceB(params: InclusiveCacheParameters) extends Module
     assert (!io.req.valid || io.req.bits.clients =/= UInt(0))
 
     io.req.ready := !busy
+    // 这里是标注一下，有哪些client需要被probe
     when (io.req.fire()) { remain_set := io.req.bits.clients }
 
     // No restrictions on the type of buffer used here

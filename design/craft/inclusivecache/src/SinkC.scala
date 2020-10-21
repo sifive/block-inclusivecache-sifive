@@ -29,15 +29,23 @@ class SinkCResponse(params: InclusiveCacheParameters) extends InclusiveCacheBund
   val source = UInt(width = params.inner.bundle.sourceBits)
   val param  = UInt(width = 3)
   val data   = Bool()
+  def dump() = {
+    DebugPrint("SinkCResponse: set: %x tag: %x source: %x param: %x data: %b last: %b\n",
+      set, tag, source, param, data, last)
+  }
 }
 
 class PutBufferCEntry(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val data = UInt(width = params.inner.bundle.dataBits)
   val corrupt = Bool()
+  def dump() = {
+    DebugPrint("PutBufferCEntry: data: %x corrupt: %b\n",
+      data, corrupt)
+  }
 }
 
-class SinkC(params: InclusiveCacheParameters) extends Module
+class SinkC(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val req = Decoupled(new FullRequest(params)) // Release
@@ -53,6 +61,44 @@ class SinkC(params: InclusiveCacheParameters) extends Module
     val rel_pop  = Decoupled(new PutBufferPop(params)).flip
     val rel_beat = new PutBufferCEntry(params)
   }
+
+  when (io.req.fire()) {
+    DebugPrint("sinkC req ")
+    io.req.bits.dump
+  }
+
+  when (io.resp.fire()) {
+    DebugPrint("sinkC resp ")
+    io.resp.bits.dump
+  }
+
+
+  when (io.c.fire()) {
+    DebugPrint("inner release ")
+    io.c.bits.dump
+  }
+
+  // DebugPrint("sinkC: set: %x way: %x\n", io.set, io.way)
+
+  when (io.bs_adr.fire()) {
+    DebugPrint("sinkC bs_adr ")
+    io.bs_adr.bits.dump
+  }
+
+  /*
+  DebugPrint("sinkC bs_dat ")
+  io.bs_dat.dump
+  */
+
+  when (io.rel_pop.fire()) {
+    DebugPrint("sinkC rel_pop ")
+    io.rel_pop.bits.dump
+  }
+
+  /*
+  DebugPrint("sinkC rel_beat ")
+  io.rel_beat.dump
+  */
 
   if (params.firstLevel) {
     // Tie off unused ports
@@ -70,6 +116,7 @@ class SinkC(params: InclusiveCacheParameters) extends Module
     val (first, last, _, beat) = params.inner.count(c)
     val hasData = params.inner.hasData(c.bits)
     val raw_resp = c.bits.opcode === TLMessages.ProbeAck || c.bits.opcode === TLMessages.ProbeAckData
+    // 锁存
     val resp = Mux(c.valid, raw_resp, RegEnable(raw_resp, c.valid))
 
     // Handling of C is broken into two cases:
@@ -87,6 +134,7 @@ class SinkC(params: InclusiveCacheParameters) extends Module
 
     // Cut path from inner C to the BankedStore SRAM setup
     //   ... this makes it easier to layout the L2 data banks far away
+    //   啥啥啥？这个似乎是实现有关的？
     val bs_adr = Wire(io.bs_adr)
     io.bs_adr <> Queue(bs_adr, 1, pipe=true)
     io.bs_dat.data   := RegEnable(c.bits.data,    bs_adr.fire())

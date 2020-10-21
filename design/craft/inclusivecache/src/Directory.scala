@@ -30,6 +30,10 @@ class DirectoryEntry(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val state   = UInt(width = params.stateBits)
   val clients = UInt(width = params.clientBits)
   val tag     = UInt(width = params.tagBits)
+  def dump() = {
+    DebugPrint("DirectoryEntry: dirty: %b state: %d clients: %x tag: %x\n",
+      dirty, state, clients, tag)
+  }
 }
 
 class DirectoryWrite(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
@@ -37,18 +41,31 @@ class DirectoryWrite(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val set  = UInt(width = params.setBits)
   val way  = UInt(width = params.wayBits)
   val data = new DirectoryEntry(params)
+  def dump() = {
+    DebugPrint("DirectoryWrite: set: %x way: %x data: \n",
+      set, way)
+    data.dump()
+  }
 }
 
 class DirectoryRead(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val set = UInt(width = params.setBits)
   val tag = UInt(width = params.tagBits)
+  def dump() = {
+    DebugPrint("DirectoryRead: set: %x tag: %x\n",
+      set, tag)
+  }
 }
 
 class DirectoryResult(params: InclusiveCacheParameters) extends DirectoryEntry(params)
 {
   val hit = Bool()
   val way = UInt(width = params.wayBits)
+  override def dump() = {
+    DebugPrint("DirectoryResult: dirty: %b state: %d clients: %x tag: %x hit: %b way: %x\n",
+      dirty, state, clients, tag, hit, way)
+  }
 }
 
 class Directory(params: InclusiveCacheParameters) extends Module
@@ -59,6 +76,25 @@ class Directory(params: InclusiveCacheParameters) extends Module
     val result = Valid(new DirectoryResult(params))
     val ready  = Bool() // reset complete; can enable access
   }
+
+  // dump
+  when (io.write.fire()) {
+    io.write.bits.dump()
+  }
+
+  when (io.read.fire()) {
+    io.read.bits.dump()
+  }
+
+  when (io.result.fire()) {
+    io.result.bits.dump()
+  }
+
+  /*
+  when (io.ready) {
+    DebugPrint("Directory Ready\n")
+  }
+  */
 
   val codeBits = new DirectoryEntry(params).getWidth
 
@@ -125,6 +161,7 @@ class Directory(params: InclusiveCacheParameters) extends Module
   val wayMatch = bypass.way === victimWay
 
   val ways = Vec(regout.map(d => new DirectoryEntry(params).fromBits(d)))
+  // 这边作为LLC，没有块儿权限之说，这里hit，不用检查权限
   val hits = Cat(ways.zipWithIndex.map { case (w, i) =>
     w.tag === tag && w.state =/= INVALID && (!setQuash || UInt(i) =/= bypass.way)
   }.reverse)

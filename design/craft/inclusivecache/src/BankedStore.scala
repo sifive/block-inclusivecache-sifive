@@ -32,6 +32,10 @@ abstract class BankedStoreAddress(val inner: Boolean, params: InclusiveCachePara
   val set  = UInt(width = params.setBits)
   val beat = UInt(width = if (inner) params.innerBeatBits else params.outerBeatBits)
   val mask = UInt(width = if (inner) params.innerMaskBits else params.outerMaskBits)
+  def dump(): Unit = {
+    DebugPrint("BankedStoreAddress: noop: %b way: %x set: %x beat: %x mask: %x\n",
+      noop, way, set, beat, mask)
+  }
 }
 
 trait BankedStoreRW
@@ -46,6 +50,9 @@ class BankedStoreInnerAddressRW(params: InclusiveCacheParameters) extends Banked
 abstract class BankedStoreData(val inner: Boolean, params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val data = UInt(width = (if (inner) params.inner.manager.beatBytes else params.outer.manager.beatBytes)*8)
+  def dump(): Unit = {
+    DebugPrint("BankedStoreData: data: %x\n", data)
+  }
 }
 
 class BankedStoreOuterData(params: InclusiveCacheParameters) extends BankedStoreData(false, params)

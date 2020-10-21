@@ -27,13 +27,27 @@ class SourceARequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val param  = UInt(width = 3)
   val source = UInt(width = params.outer.bundle.sourceBits)
   val block  = Bool()
+  def dump() = {
+    DebugPrint("SourceARequest: tag: %x set: %x param: %x source: %x block: %b\n",
+      tag, set, param, source, block)
+  }
 }
 
-class SourceA(params: InclusiveCacheParameters) extends Module
+class SourceA(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val req = Decoupled(new SourceARequest(params)).flip
     val a = Decoupled(new TLBundleA(params.outer.bundle))
+  }
+
+  when (io.a.fire()) {
+    DebugPrint("outer acquire ")
+    io.a.bits.dump
+  }
+    
+  when (io.req.fire()) {
+    DebugPrint("sourceA req ")
+    io.req.bits.dump
   }
 
   // ready must be a register, because we derive valid from ready

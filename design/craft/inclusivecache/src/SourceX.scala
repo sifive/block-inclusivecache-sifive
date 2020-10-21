@@ -24,6 +24,9 @@ import freechips.rocketchip.tilelink._
 class SourceXRequest(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val fail = Bool()
+  def dump() = {
+    DebugPrint("SourceXRequest: fail: %b\n", fail)
+  }
 }
 
 class SourceX(params: InclusiveCacheParameters) extends Module
@@ -31,6 +34,16 @@ class SourceX(params: InclusiveCacheParameters) extends Module
   val io = new Bundle {
     val req = Decoupled(new SourceXRequest(params)).flip
     val x = Decoupled(new SourceXRequest(params))
+  }
+
+  when (io.req.fire()) {
+    DebugPrint("SourceX req ")
+    io.req.bits.dump
+  }
+
+  when (io.x.fire()) {
+    DebugPrint("SourceXRequest ")
+    io.x.bits.dump
   }
 
   val x = Wire(io.x) // ready must not depend on valid
