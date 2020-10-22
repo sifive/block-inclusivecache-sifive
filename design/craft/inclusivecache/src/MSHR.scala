@@ -140,6 +140,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     val sinkd     = Valid(new SinkDResponse(params)).flip
     val sinke     = Valid(new SinkEResponse(params)).flip
     val nestedwb  = new NestedWriteback(params).flip
+    val mshr_id   = Input(UInt())
   }
 
   when (io.allocate.valid) {
@@ -228,6 +229,26 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val s_execute        = RegInit(Bool(true)) // D  w_pprobeack, w_grant
   val w_grantack       = RegInit(Bool(true))
   val s_writeback      = RegInit(Bool(true)) // W  w_*
+
+  when (request_valid) {
+    DebugPrint(params, "MSHR %d: s_rprobe: %b w_rprobeackfirst: %b w_rprobeacklast: %b\n",
+      io.mshr_id, s_rprobe, w_rprobeackfirst, w_rprobeacklast)
+
+    DebugPrint(params, "MSHR %d: s_release: %b w_releaseack: %b\n",
+      io.mshr_id, s_release, w_releaseack)
+
+    DebugPrint(params, "MSHR %d: s_pprobe: %b w_pprobeackfirst: %b w_pprobeacklast: %b w_pprobeack: %b s_probeack: %b\n",
+      io.mshr_id, s_pprobe, w_pprobeackfirst, w_pprobeacklast, w_pprobeack, s_probeack)
+
+    DebugPrint(params, "MSHR %d: s_acquire: %b w_grant: %b w_grantfirst: %b w_grantlast: %b s_grantack: %b\n",
+      io.mshr_id, s_acquire, w_grant, w_grantfirst, w_grantlast, s_grantack)
+
+    DebugPrint(params, "MSHR %d: s_flush: %b s_execute: %b s_writeback: %b\n",
+      io.mshr_id, s_flush, s_execute, s_writeback)
+
+    DebugPrint(params, "MSHR %d: w_grantack: %b\n",
+      io.mshr_id, w_grantack)
+  }
 
   // [1]: We cannot issue outer Acquire while holding blockB (=> outA can stall)
   // However, inB and outC are higher priority than outB, so s_release and s_pprobe

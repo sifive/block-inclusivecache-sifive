@@ -143,6 +143,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
     m.io.sinkd.bits := sinkD.io.resp.bits
     m.io.sinke.bits := sinkE.io.resp.bits
     m.io.nestedwb := nestedwb
+    m.io.mshr_id  := i.U
   }
 
   // 这边的mshr好像分成了抢占mshr还有普通mshr？
