@@ -28,7 +28,7 @@ class SourceARequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val source = UInt(width = params.outer.bundle.sourceBits)
   val block  = Bool()
   def dump() = {
-    DebugPrint("SourceARequest: tag: %x set: %x param: %x source: %x block: %b\n",
+    DebugPrint(params, "SourceARequest: tag: %x set: %x param: %x source: %x block: %b\n",
       tag, set, param, source, block)
   }
 }
@@ -40,13 +40,15 @@ class SourceA(params: InclusiveCacheParameters) extends Module with HasTLDump
     val a = Decoupled(new TLBundleA(params.outer.bundle))
   }
 
+  /*
   when (io.a.fire()) {
-    DebugPrint("outer acquire ")
+    DebugPrint(params, "outer acquire ")
     io.a.bits.dump
   }
+  */
     
   when (io.req.fire()) {
-    DebugPrint("sourceA req ")
+    DebugPrint(params, "sourceA req ")
     io.req.bits.dump
   }
 

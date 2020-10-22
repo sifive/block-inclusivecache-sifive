@@ -28,7 +28,7 @@ class SourceBRequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val set     = UInt(width = params.setBits)
   val clients = UInt(width = params.clientBits)
   def dump() = {
-    DebugPrint("SourceBRequest: param: %x tag: %x set: %x clients: %x\n",
+    DebugPrint(params, "SourceBRequest: param: %x tag: %x set: %x clients: %x\n",
       param, tag, set, clients)
   }
 }
@@ -40,13 +40,15 @@ class SourceB(params: InclusiveCacheParameters) extends Module with HasTLDump
     val b = Decoupled(new TLBundleB(params.inner.bundle))
   }
 
+  /*
   when (io.b.fire()) {
-    DebugPrint("inner probe ")
+    DebugPrint(params, "inner probe ")
     io.b.bits.dump
   }
+  */
     
   when (io.req.fire()) {
-    DebugPrint("sourceB req ")
+    DebugPrint(params, "sourceB req ")
     io.req.bits.dump
   }
 

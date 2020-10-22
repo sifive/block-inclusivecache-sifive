@@ -24,7 +24,7 @@ class SinkXRequest(params: InclusiveCacheParameters) extends InclusiveCacheBundl
 {
   val address = UInt(width = params.inner.bundle.addressBits)
   def dump() = {
-    DebugPrint("SinkXRequest: address: %x\n", address)
+    DebugPrint(params, "SinkXRequest: address: %x\n", address)
   }
 }
 
@@ -36,12 +36,12 @@ class SinkX(params: InclusiveCacheParameters) extends Module
   }
 
   when (io.req.fire()) {
-    DebugPrint("sinkX req ")
+    DebugPrint(params, "sinkX req ")
     io.req.bits.dump
   }
 
   when (io.x.fire()) {
-    DebugPrint("sinkX X ")
+    DebugPrint(params, "sinkX X ")
     io.x.bits.dump
   }
     

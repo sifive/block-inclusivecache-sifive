@@ -14,11 +14,11 @@ object GTimer {
 
 
 object DebugPrint {
-  def apply(fmt: String, data: Bits*): Any =
-    apply(Printable.pack(fmt, data:_*))
+  def apply(params: InclusiveCacheParameters, fmt: String, data: Bits*): Any =
+    apply(params, Printable.pack(fmt, data:_*))
 
-  def apply(pable: Printable): Any = {
-    val commonInfo = p"[time=${GTimer()}] LLC: "
+  def apply(params: InclusiveCacheParameters, pable: Printable): Any = {
+    val commonInfo = p"[time=${GTimer()}] ${params.cacheName}: "
     printf(commonInfo + pable)
   }
 }

@@ -33,7 +33,7 @@ abstract class BankedStoreAddress(val inner: Boolean, params: InclusiveCachePara
   val beat = UInt(width = if (inner) params.innerBeatBits else params.outerBeatBits)
   val mask = UInt(width = if (inner) params.innerMaskBits else params.outerMaskBits)
   def dump(): Unit = {
-    DebugPrint("BankedStoreAddress: noop: %b way: %x set: %x beat: %x mask: %x\n",
+    DebugPrint(params, "BankedStoreAddress: noop: %b way: %x set: %x beat: %x mask: %x\n",
       noop, way, set, beat, mask)
   }
 }
@@ -51,7 +51,7 @@ abstract class BankedStoreData(val inner: Boolean, params: InclusiveCacheParamet
 {
   val data = UInt(width = (if (inner) params.inner.manager.beatBytes else params.outer.manager.beatBytes)*8)
   def dump(): Unit = {
-    DebugPrint("BankedStoreData: data: %x\n", data)
+    DebugPrint(params, "BankedStoreData: data: %x\n", data)
   }
 }
 

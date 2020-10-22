@@ -24,7 +24,7 @@ class SinkEResponse(params: InclusiveCacheParameters) extends InclusiveCacheBund
 {
   val sink = UInt(width = params.inner.bundle.sinkBits)
   def dump() = {
-    DebugPrint("SinkEResponse: sink: %x\n", sink)
+    DebugPrint(params, "SinkEResponse: sink: %x\n", sink)
   }
 }
 
@@ -36,14 +36,16 @@ class SinkE(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.resp.fire()) {
-    DebugPrint("sinkE resp: ")
+    DebugPrint(params, "sinkE resp: ")
     io.resp.bits.dump()
   }
 
+  /*
   when (io.e.fire()) {
-    DebugPrint("inner mem_finish: ")
+    DebugPrint(params, "inner mem_finish: ")
     io.e.bits.dump
   }
+  */
 
   if (params.firstLevel) {
     // Tie off unused ports

@@ -25,7 +25,7 @@ class SourceXRequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
 {
   val fail = Bool()
   def dump() = {
-    DebugPrint("SourceXRequest: fail: %b\n", fail)
+    DebugPrint(params, "SourceXRequest: fail: %b\n", fail)
   }
 }
 
@@ -37,12 +37,12 @@ class SourceX(params: InclusiveCacheParameters) extends Module
   }
 
   when (io.req.fire()) {
-    DebugPrint("SourceX req ")
+    DebugPrint(params, "SourceX req ")
     io.req.bits.dump
   }
 
   when (io.x.fire()) {
-    DebugPrint("SourceXRequest ")
+    DebugPrint(params, "SourceXRequest ")
     io.x.bits.dump
   }
 

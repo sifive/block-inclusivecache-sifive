@@ -30,7 +30,7 @@ class SourceDRequest(params: InclusiveCacheParameters) extends FullRequest(param
   val way  = UInt(width = params.wayBits)
   val bad  = Bool()
   override def dump() = {
-    DebugPrint("SourceDRequest: prio: %x control: %b opcode: %x param: %x size: %x source: %x tag: %x set: %x offset: %x put: %x sink: %x way: %x bad: %b\n",
+    DebugPrint(params, "SourceDRequest: prio: %x control: %b opcode: %x param: %x size: %x source: %x tag: %x set: %x offset: %x put: %x sink: %x way: %x bad: %b\n",
       prio.asUInt, control, opcode, param, size, source, tag, set, offset, put, sink, way, bad)
   }
 }
@@ -40,7 +40,7 @@ class SourceDHazard(params: InclusiveCacheParameters) extends InclusiveCacheBund
   val set = UInt(width = params.setBits)
   val way = UInt(width = params.wayBits)
   def dump() = {
-    DebugPrint("SourceDHazard: set: %x way: %x\n", set, way)
+    DebugPrint(params, "SourceDHazard: set: %x way: %x\n", set, way)
   }
 }
 
@@ -50,7 +50,7 @@ class PutBufferACEntry(params: InclusiveCacheParameters) extends InclusiveCacheB
   val mask = UInt(width = params.inner.bundle.dataBits/8)
   val corrupt = Bool()
   def dump() = {
-    DebugPrint("PutBufferACEntry: data: %x mask: %x corrupt: %b\n", data, mask, corrupt)
+    DebugPrint(params, "PutBufferACEntry: data: %x mask: %x corrupt: %b\n", data, mask, corrupt)
   }
 }
 
@@ -78,72 +78,74 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("SourceD req:")
+    DebugPrint(params, "SourceD req:")
     io.req.bits.dump()
   }
 
+  /*
   when (io.d.fire()) {
-    DebugPrint("inner grant:")
+    DebugPrint(params, "inner grant:")
     io.d.bits.dump
   }
+  */
 
   when (io.pb_pop.fire()) {
-    DebugPrint("SourceD pb_pop:")
+    DebugPrint(params, "SourceD pb_pop:")
     io.pb_pop.bits.dump()
   }
 
   /*
-  DebugPrint("SourceD pb_beat:")
+  DebugPrint(params, "SourceD pb_beat:")
   io.pb_beat.dump()
   */
 
   when (io.rel_pop.fire()) {
-    DebugPrint("SourceD rel_pop:")
+    DebugPrint(params, "SourceD rel_pop:")
     io.rel_pop.bits.dump()
   }
 
   /*
-  DebugPrint("SourceD rel_beat:")
+  DebugPrint(params, "SourceD rel_beat:")
   io.rel_beat.dump()
   */
 
   when (io.bs_radr.fire()) {
-    DebugPrint("SourceD bs_radr:")
+    DebugPrint(params, "SourceD bs_radr:")
     io.bs_radr.bits.dump()
   }
 
   /*
-  DebugPrint("SourceD bs_rdat:")
+  DebugPrint(params, "SourceD bs_rdat:")
   io.bs_rdat.dump()
   */
 
 
   when (io.bs_wadr.fire()) {
-    DebugPrint("SourceD bs_wadr:")
+    DebugPrint(params, "SourceD bs_wadr:")
     io.bs_wadr.bits.dump()
   }
 
   /*
-  DebugPrint("SourceD bs_wdat:")
+  DebugPrint(params, "SourceD bs_wdat:")
   io.bs_wdat.dump()
   */
 
  /*
-  DebugPrint("SourceD evict_req:")
+  DebugPrint(params, "SourceD evict_req:")
   io.evict_req.dump()
 
   when (io.evict_safe) {
-    DebugPrint("SourceD evict_safe\n")
+    DebugPrint(params, "SourceD evict_safe\n")
   }
   */
 
   /*
-  DebugPrint("SourceD grant_req:")
+  DebugPrint(params, "SourceD grant_req:")
   io.grant_req.dump()
   */
 
   when (io.grant_safe) {
-    DebugPrint("SourceD grant_safe\n")
+    DebugPrint(params, "SourceD grant_safe\n")
   }
 
   // 总线宽度，暂时不知道是对内还是对外

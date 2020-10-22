@@ -31,7 +31,7 @@ class DirectoryEntry(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val clients = UInt(width = params.clientBits)
   val tag     = UInt(width = params.tagBits)
   def dump() = {
-    DebugPrint("DirectoryEntry: dirty: %b state: %d clients: %x tag: %x\n",
+    DebugPrint(params, "DirectoryEntry: dirty: %b state: %d clients: %x tag: %x\n",
       dirty, state, clients, tag)
   }
 }
@@ -42,7 +42,7 @@ class DirectoryWrite(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val way  = UInt(width = params.wayBits)
   val data = new DirectoryEntry(params)
   def dump() = {
-    DebugPrint("DirectoryWrite: set: %x way: %x data: \n",
+    DebugPrint(params, "DirectoryWrite: set: %x way: %x data: \n",
       set, way)
     data.dump()
   }
@@ -53,7 +53,7 @@ class DirectoryRead(params: InclusiveCacheParameters) extends InclusiveCacheBund
   val set = UInt(width = params.setBits)
   val tag = UInt(width = params.tagBits)
   def dump() = {
-    DebugPrint("DirectoryRead: set: %x tag: %x\n",
+    DebugPrint(params, "DirectoryRead: set: %x tag: %x\n",
       set, tag)
   }
 }
@@ -63,7 +63,7 @@ class DirectoryResult(params: InclusiveCacheParameters) extends DirectoryEntry(p
   val hit = Bool()
   val way = UInt(width = params.wayBits)
   override def dump() = {
-    DebugPrint("DirectoryResult: dirty: %b state: %d clients: %x tag: %x hit: %b way: %x\n",
+    DebugPrint(params, "DirectoryResult: dirty: %b state: %d clients: %x tag: %x hit: %b way: %x\n",
       dirty, state, clients, tag, hit, way)
   }
 }
@@ -92,7 +92,7 @@ class Directory(params: InclusiveCacheParameters) extends Module
 
   /*
   when (io.ready) {
-    DebugPrint("Directory Ready\n")
+    DebugPrint(params, "Directory Ready\n")
   }
   */
 

@@ -28,14 +28,16 @@ class SinkB(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("sinkB req ")
+    DebugPrint(params, "sinkB req ")
     io.req.bits.dump
   }
 
+  /*
   when (io.b.fire()) {
-    DebugPrint("inner probe ")
+    DebugPrint(params, "inner probe ")
     io.b.bits.dump
   }
+  */
     
   val b = params.micro.innerBuf.c(io.b)
 

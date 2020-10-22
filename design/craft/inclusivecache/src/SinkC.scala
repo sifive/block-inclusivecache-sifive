@@ -30,7 +30,7 @@ class SinkCResponse(params: InclusiveCacheParameters) extends InclusiveCacheBund
   val param  = UInt(width = 3)
   val data   = Bool()
   def dump() = {
-    DebugPrint("SinkCResponse: set: %x tag: %x source: %x param: %x data: %b last: %b\n",
+    DebugPrint(params, "SinkCResponse: set: %x tag: %x source: %x param: %x data: %b last: %b\n",
       set, tag, source, param, data, last)
   }
 }
@@ -40,7 +40,7 @@ class PutBufferCEntry(params: InclusiveCacheParameters) extends InclusiveCacheBu
   val data = UInt(width = params.inner.bundle.dataBits)
   val corrupt = Bool()
   def dump() = {
-    DebugPrint("PutBufferCEntry: data: %x corrupt: %b\n",
+    DebugPrint(params, "PutBufferCEntry: data: %x corrupt: %b\n",
       data, corrupt)
   }
 }
@@ -63,40 +63,42 @@ class SinkC(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("sinkC req ")
+    DebugPrint(params, "sinkC req ")
     io.req.bits.dump
   }
 
   when (io.resp.fire()) {
-    DebugPrint("sinkC resp ")
+    DebugPrint(params, "sinkC resp ")
     io.resp.bits.dump
   }
 
 
+  /*
   when (io.c.fire()) {
-    DebugPrint("inner release ")
+    DebugPrint(params, "inner release ")
     io.c.bits.dump
   }
+  */
 
-  // DebugPrint("sinkC: set: %x way: %x\n", io.set, io.way)
+  // DebugPrint(params, "sinkC: set: %x way: %x\n", io.set, io.way)
 
   when (io.bs_adr.fire()) {
-    DebugPrint("sinkC bs_adr ")
+    DebugPrint(params, "sinkC bs_adr ")
     io.bs_adr.bits.dump
   }
 
   /*
-  DebugPrint("sinkC bs_dat ")
+  DebugPrint(params, "sinkC bs_dat ")
   io.bs_dat.dump
   */
 
   when (io.rel_pop.fire()) {
-    DebugPrint("sinkC rel_pop ")
+    DebugPrint(params, "sinkC rel_pop ")
     io.rel_pop.bits.dump
   }
 
   /*
-  DebugPrint("sinkC rel_beat ")
+  DebugPrint(params, "sinkC rel_beat ")
   io.rel_beat.dump
   */
 

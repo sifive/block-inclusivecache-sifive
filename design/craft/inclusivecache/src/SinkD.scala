@@ -29,7 +29,7 @@ class SinkDResponse(params: InclusiveCacheParameters) extends InclusiveCacheBund
   val sink   = UInt(width = params.outer.bundle.sinkBits)
   val denied = Bool()
   def dump() = {
-    DebugPrint("SinkDResponse: last: %b opcode: %x param: %x source: %x sink: %x denied: %b\n",
+    DebugPrint(params, "SinkDResponse: last: %b opcode: %x param: %x source: %x sink: %x denied: %b\n",
       last, opcode, param, source, sink, denied)
   }
 }
@@ -52,32 +52,34 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.resp.fire()) {
-    DebugPrint("sinkD resp ")
+    DebugPrint(params, "sinkD resp ")
     io.resp.bits.dump
   }
 
 
+  /*
   when (io.d.fire()) {
-    DebugPrint("outer grant ")
+    DebugPrint(params, "outer grant ")
     io.d.bits.dump
   }
+  */
 
-  // DebugPrint("sinkD: source: %x set: %x way: %x\n", io.source, io.set, io.way)
+  // DebugPrint(params, "sinkD: source: %x set: %x way: %x\n", io.source, io.set, io.way)
 
   when (io.bs_adr.fire()) {
-    DebugPrint("sinkD bs_adr ")
+    DebugPrint(params, "sinkD bs_adr ")
     io.bs_adr.bits.dump
   }
 
   /*
-  DebugPrint("sinkD bs_dat ")
+  DebugPrint(params, "sinkD bs_dat ")
   io.bs_dat.dump
 
-  DebugPrint("sinkD grant_req ")
+  DebugPrint(params, "sinkD grant_req ")
   io.grant_req.dump
 
   when (io.grant_safe) {
-    DebugPrint("sinkD grant_safe\n")
+    DebugPrint(params, "sinkD grant_safe\n")
   }
   */
 

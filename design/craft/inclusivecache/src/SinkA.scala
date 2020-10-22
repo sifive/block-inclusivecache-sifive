@@ -27,7 +27,7 @@ class PutBufferAEntry(params: InclusiveCacheParameters) extends InclusiveCacheBu
   val mask = UInt(width = params.inner.bundle.dataBits/8)
   val corrupt = Bool()
   def dump() = {
-    DebugPrint("PutBufferAEntry: data: %x mask: %x corrupt: %b\n",
+    DebugPrint(params, "PutBufferAEntry: data: %x mask: %x corrupt: %b\n",
       data, mask, corrupt)
   }
 }
@@ -37,7 +37,7 @@ class PutBufferPop(params: InclusiveCacheParameters) extends InclusiveCacheBundl
   val index = UInt(width = params.putBits)
   val last = Bool()
   def dump() = {
-    DebugPrint("PutBufferAEntry: index: %x last: %b\n",
+    DebugPrint(params, "PutBufferAEntry: index: %x last: %b\n",
       index, last)
   }
 }
@@ -53,22 +53,24 @@ class SinkA(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("sinkA req ")
+    DebugPrint(params, "sinkA req ")
     io.req.bits.dump
   }
 
+  /*
   when (io.a.fire()) {
-    DebugPrint("inner acquire ")
-    io.a.bits.dump
+    DebugPrint(params, "inner acquire ")
+    io.a.bits.dump(params)
   }
+  */
     
   when (io.pb_pop.fire()){
-    DebugPrint("sinkA pb_pop ")
+    DebugPrint(params, "sinkA pb_pop ")
     io.pb_pop.bits.dump
   }
     
   /*
-  DebugPrint("sinkA pb_beat ")
+  DebugPrint(params, "sinkA pb_beat ")
   io.pb_beat.dump
   */
 

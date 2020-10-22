@@ -30,7 +30,7 @@ class SourceCRequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val way    = UInt(width = params.wayBits)
   val dirty  = Bool()
   def dump() = {
-    DebugPrint("SourceCRequest: opcode: %x param: %x source: %x tag: %x set: %x way: %x dirty: %b\n",
+    DebugPrint(params, "SourceCRequest: opcode: %x param: %x source: %x tag: %x set: %x way: %x dirty: %b\n",
       opcode, param, source, tag, set, way, dirty)
   }
 }
@@ -49,29 +49,31 @@ class SourceC(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("SourceC req ")
+    DebugPrint(params, "SourceC req ")
     io.req.bits.dump
   }
 
+  /*
   when (io.c.fire()) {
-    DebugPrint("outer release ")
+    DebugPrint(params, "outer release ")
     io.c.bits.dump
   }
+  */
     
   when (io.bs_adr.fire()){
-    DebugPrint("SourceC bs_adr ")
+    DebugPrint(params, "SourceC bs_adr ")
     io.bs_adr.bits.dump
   }
     
   /*
-  DebugPrint("SourceC bs_dat ")
+  DebugPrint(params, "SourceC bs_dat ")
   io.bs_dat.dump
     
-  DebugPrint("SourceC evict_req ")
+  DebugPrint(params, "SourceC evict_req ")
   io.evict_req.dump
     
   when (io.evict_safe){
-    DebugPrint("SourceC evict_safe\n")
+    DebugPrint(params, "SourceC evict_safe\n")
   }
   */
     

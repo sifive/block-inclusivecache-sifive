@@ -24,7 +24,7 @@ class SourceERequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
 {
   val sink = UInt(width = params.outer.bundle.sinkBits)
   def dump() = {
-    DebugPrint("SourceERequest: sink: %x\n", sink)
+    DebugPrint(params, "SourceERequest: sink: %x\n", sink)
   }
 }
 
@@ -36,14 +36,16 @@ class SourceE(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   when (io.req.fire()) {
-    DebugPrint("sourceE req ")
+    DebugPrint(params, "sourceE req ")
     io.req.bits.dump
   }
 
+  /*
   when (io.e.fire()) {
-    DebugPrint("outer finish ")
+    DebugPrint(params, "outer finish ")
     io.e.bits.dump
   }
+  */
     
   // ready must be a register, because we derive valid from ready
   require (!params.micro.outerBuf.e.pipe && params.micro.outerBuf.e.isDefined)

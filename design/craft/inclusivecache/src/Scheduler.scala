@@ -22,7 +22,7 @@ import freechips.rocketchip.diplomacy.AddressSet
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 
-class Scheduler(params: InclusiveCacheParameters) extends Module
+class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
 {
   val io = new Bundle {
     val in = TLBundle(params.inner.bundle).flip
@@ -48,6 +48,55 @@ class Scheduler(params: InclusiveCacheParameters) extends Module
   io.in.b <> sourceB.io.b
   io.in.d <> sourceD.io.d
   io.resp <> sourceX.io.x
+
+  when (io.in.a.fire()) {
+    DebugPrint(params, "inner acquire ")
+    io.in.a.bits.dump(params)
+  }
+  when (io.in.b.fire()) {
+    DebugPrint(params, "inner probe ")
+    io.in.b.bits.dump(params)
+  }
+
+  when (io.in.c.fire()) {
+    DebugPrint(params, "inner release ")
+    io.in.c.bits.dump(params)
+  }
+
+  when (io.in.d.fire()) {
+    DebugPrint(params, "inner grant ")
+    io.in.d.bits.dump(params)
+  }
+
+  when (io.in.e.fire()) {
+    DebugPrint(params, "inner finish ")
+    io.in.e.bits.dump(params)
+  }
+
+  when (io.out.a.fire()) {
+    DebugPrint(params, "outer acquire ")
+    io.out.a.bits.dump(params)
+  }
+  when (io.out.b.fire()) {
+    DebugPrint(params, "outer probe ")
+    io.out.b.bits.dump(params)
+  }
+
+  when (io.out.c.fire()) {
+    DebugPrint(params, "outer release ")
+    io.out.c.bits.dump(params)
+  }
+
+  when (io.out.d.fire()) {
+    DebugPrint(params, "outer grant ")
+    io.out.d.bits.dump(params)
+  }
+
+  when (io.out.e.fire()) {
+    DebugPrint(params, "outer finish ")
+    io.out.e.bits.dump(params)
+  }
+
 
   val sinkA = Module(new SinkA(params))
   val sinkB = Module(new SinkB(params))

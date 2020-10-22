@@ -60,7 +60,7 @@ class ScheduleRequest(params: InclusiveCacheParameters) extends InclusiveCacheBu
       dir.bits.dump()
     }
     when (reload) {
-      DebugPrint("reload\n")
+      DebugPrint(params, "reload\n")
     }
   }
 }
@@ -77,7 +77,7 @@ class MSHRStatus(params: InclusiveCacheParameters) extends InclusiveCacheBundle(
   val nestC  = Bool()
 
   def dump() = {
-    DebugPrint("MSHRStatus: set: %x tag: %x way: %x blockB: %b nestB: %b blockC: %b nestC: %b\n",
+    DebugPrint(params, "MSHRStatus: set: %x tag: %x way: %x blockB: %b nestB: %b blockC: %b nestC: %b\n",
       set, tag, way, blockB, nestB, blockC, nestC)
   }
 }
@@ -91,7 +91,7 @@ class NestedWriteback(params: InclusiveCacheParameters) extends InclusiveCacheBu
   val b_clr_dirty = Bool() // nested Probes clear dirty
   val c_set_dirty = Bool() // nested Releases MAY set dirty
   def dump() = {
-    DebugPrint("NestedWriteback: set: %x tag: %x b_toN: %b b_toB: %b b_clr_dirty: %b c_set_dirty: %b\n",
+    DebugPrint(params, "NestedWriteback: set: %x tag: %x b_toN: %b b_toB: %b b_clr_dirty: %b c_set_dirty: %b\n",
       set, tag, b_toN, b_toB, b_clr_dirty, c_set_dirty)
   }
 }
@@ -143,37 +143,37 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   }
 
   when (io.allocate.valid) {
-    DebugPrint("MSHR allocate: ")
+    DebugPrint(params, "MSHR allocate: ")
     io.allocate.bits.dump()
   }
 
   when (io.directory.valid) {
-    DebugPrint("MSHR directory: ")
+    DebugPrint(params, "MSHR directory: ")
     io.directory.bits.dump()
   }
 
   when (io.status.valid) {
-    DebugPrint("MSHR status: ")
+    DebugPrint(params, "MSHR status: ")
     io.status.bits.dump()
   }
 
   when (io.schedule.fire()) {
-    DebugPrint("MSHR schedule: ")
+    DebugPrint(params, "MSHR schedule: ")
     io.schedule.bits.dump()
   }
 
   when (io.sinkc.valid) {
-    DebugPrint("MSHR sinkc: ")
+    DebugPrint(params, "MSHR sinkc: ")
     io.sinkc.bits.dump()
   }
 
   when (io.sinkd.valid) {
-    DebugPrint("MSHR sinkd: ")
+    DebugPrint(params, "MSHR sinkd: ")
     io.sinkd.bits.dump()
   }
 
   when (io.sinke.valid) {
-    DebugPrint("MSHR sinke: ")
+    DebugPrint(params, "MSHR sinke: ")
     io.sinke.bits.dump()
   }
 
