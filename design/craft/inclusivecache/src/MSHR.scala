@@ -183,6 +183,19 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val meta_valid = RegInit(Bool(false))
   val meta = Reg(new DirectoryResult(params))
 
+  // outer probe
+  val outer_probe_toT = request.param === toT
+  val outer_probe_toB = request.param === toB
+  val outer_probe_toN = request.param === toN
+
+  // if probe tried to cap permissions
+  // we do nothing
+  // 假如not hit，那我们是nothing状态，那么不管probe上来是啥cap，对我们来说，都是cap
+  val outer_probe_cap_permission = !meta.hit ||
+    ((meta.state === BRANCH && (outer_probe_toB || outer_probe_toT)) ||
+    ((meta.state === TRUNK || meta.state === TIP) && outer_probe_toT))
+  val outer_probe_shrink_permission = meta.hit && !outer_probe_cap_permission
+
   // Define which states are valid
   // 这是啥意思？
   // branch, trunk, tip到底是啥意思啊？
@@ -342,6 +355,22 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     final_meta_writeback.state   := Mux(request.param =/= TtoT && meta.state === TRUNK, TIP, meta.state)
     final_meta_writeback.clients := meta.clients & ~Mux(isToN(request.param), req_clientBit, UInt(0))
     final_meta_writeback.hit     := Bool(true) // chained requests are hits
+  } .elsewhen (request.prio(1) && Bool(!params.lastLevel)) { // probe
+    // 如果是cap permission，那不用修改meta
+    when (outer_probe_shrink_permission) {
+      // 对于shrinkPermission肯定是toB或者toN，肯定是变成clean的
+      final_meta_writeback.dirty   := Bool(false)
+      final_meta_writeback.state   := Mux(outer_probe_toB, BRANCH, INVALID)
+      // 如果变成N了，肯定是没有client的
+      // 如果是toB的话，只有可能是从trunk或者tip toB
+      // 只有trunk的toB，要看client的probeAck是不是toN，来更新client
+      // tip的不用改client
+      when (outer_probe_toN) {
+        final_meta_writeback.clients := UInt(0)
+      } .elsewhen (outer_probe_toB && meta.state === TRUNK) {
+        final_meta_writeback.clients := meta.clients & ~probes_toN
+      }
+    }
   } .elsewhen (request.control && Bool(params.control)) { // request.prio(0)
     when (meta.hit) {
       final_meta_writeback.dirty   := Bool(false)
@@ -413,7 +442,16 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.c.bits.opcode  := Mux(request.prio(1),
     Mux(meta.dirty, ProbeAckData, ProbeAck),
     Mux(meta.dirty, ReleaseData, Release))
-  io.schedule.bits.c.bits.param   := Mux(meta.state === BRANCH, BtoN, TtoN)
+
+  val release_param = Mux(meta.state === BRANCH, BtoN, TtoN)
+  val probeAck_report_param = Mux(!meta.hit, NtoN,
+    Mux(meta.state === BRANCH, BtoB, TtoT))
+  // 只有branch，trunk和tip状态有shrink
+  val probeAck_shrink_param = Mux(meta.state === BRANCH, BtoN,
+    Mux(outer_probe_toB, TtoB, TtoN))
+  val probeAck_param = Mux(outer_probe_cap_permission, probeAck_report_param, probeAck_shrink_param)
+
+  io.schedule.bits.c.bits.param   := Mux(request.prio(1), probeAck_param, release_param)
   io.schedule.bits.c.bits.source  := UInt(0)
   io.schedule.bits.c.bits.tag     := meta.tag
   io.schedule.bits.c.bits.set     := request.set
@@ -629,7 +667,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     params.ccover(!set_pprobeack && w_rprobeackfirst, "MSHR_PROBE_SERIAL", "Sequential routing of probe response data")
     params.ccover( set_pprobeack && w_rprobeackfirst, "MSHR_PROBE_WORMHOLE", "Wormhole routing of probe response data")
     // However, meta-data updates need to be done more cautiously
-    // 啥意思？
+    // C通道下来的假如带了数据，那我们肯定得变成dirty的。
     when (meta.state =/= INVALID && io.sinkc.bits.tag === meta.tag && io.sinkc.bits.data) { meta.dirty := Bool(true) } // !!!
   }
   when (io.sinkd.valid) {
@@ -674,6 +712,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
       assert(!(prior === from.code), s"State bypass from ${from} should be impossible ${cfg}")
     }
   }
+
 
   when (io.allocate.valid && io.allocate.bits.repeat) {
     bypass(S_INVALID,   f || p) // Can lose permissions (probe/flush)
@@ -798,14 +837,37 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     // For B channel requests (ie: ProbeBlock/ProbePerm)
     // 假如不是last level cache，就要处理probe请求
     .elsewhen (new_request.prio(1) && Bool(!params.lastLevel)) {
-      // Do we need to actually do something?
+      // 在这里主要检查：
+      // 1. 检查meta data是否一致
+      // 2. action
       s_probeack := Bool(false)
-      when (new_meta.hit) {
+
+      // if probe tried to cap permissions
+      // we do nothing
+      // 假如not hit，那我们是nothing状态，那么不管probe上来是啥cap，对我们来说，都是cap
+      val probe_toT = new_request.param === toT
+      val probe_toB = new_request.param === toB
+      val probe_toN = new_request.param === toN
+      val isCap = !new_meta.hit ||
+        ((new_meta.state === BRANCH && (probe_toB || probe_toT)) ||
+        ((new_meta.state === TRUNK || new_meta.state === TIP) && probe_toT))
+      val isShrink = new_meta.hit && !isCap
+
+      // Do we need to actually do something?
+      when (isShrink) {
+        s_writeback := Bool(false)
+        // 当当前的块儿是trunk时，肯定得有client是tip
+        assert(new_meta.state =/= TRUNK || new_meta.clients =/= UInt(0))
+        // 如果我们是tip，并且我们有branch，我们被probe要求变成Branch
+        // 那么我们不需要做inner probe
+        // 我们只需要把自己的tip给丢掉就可以了
+        val tip_with_branch_toB = new_meta.state === TIP && new_meta.clients =/= UInt(0) && probe_toB
         // Do we need to shoot-down inner caches?
-        when (Bool(!params.firstLevel) && (new_meta.clients =/= UInt(0))) {
+        when (Bool(!params.firstLevel) && (new_meta.clients =/= UInt(0)) && !tip_with_branch_toB) {
           s_pprobe := Bool(false)
           w_pprobeackfirst := Bool(false)
           w_pprobeacklast := Bool(false)
+          w_pprobeack := Bool(false)
         }
       }
     }
