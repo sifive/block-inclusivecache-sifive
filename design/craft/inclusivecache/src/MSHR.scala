@@ -463,8 +463,9 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.b.bits.tag     := Mux(!s_rprobe, meta.tag, request.tag)
   io.schedule.bits.b.bits.set     := request.set
   io.schedule.bits.b.bits.clients := meta.clients & ~excluded_client
+  // only probe hit and dirty need to use probeAckData
   io.schedule.bits.c.bits.opcode  := Mux(request.prio(1),
-    Mux(meta.dirty, ProbeAckData, ProbeAck),
+    Mux(meta.hit && meta.dirty, ProbeAckData, ProbeAck),
     Mux(meta.dirty, ReleaseData, Release))
 
   val release_param = Mux(meta.state === BRANCH, BtoN, TtoN)
@@ -477,10 +478,13 @@ class MSHR(params: InclusiveCacheParameters) extends Module
 
   io.schedule.bits.c.bits.param   := Mux(request.prio(1), probeAck_param, release_param)
   io.schedule.bits.c.bits.source  := UInt(0)
-  io.schedule.bits.c.bits.tag     := meta.tag
+  io.schedule.bits.c.bits.tag     := Mux(request.prio(1), request.tag, meta.tag)
   io.schedule.bits.c.bits.set     := request.set
   io.schedule.bits.c.bits.way     := meta.way
-  io.schedule.bits.c.bits.dirty   := meta.dirty
+  // when probe and hit, we use dirty
+  // when probe and not hit, we do not use meta.dirty
+  // otherwise, for acquire, we use meta.dirty
+  io.schedule.bits.c.bits.dirty   := Mux(request.prio(1) && !meta.hit, Bool(false), meta.dirty)
   io.schedule.bits.d.bits         := request
   io.schedule.bits.d.bits.param   := Mux(!req_acquire, request.param,
                                        MuxLookup(request.param, Wire(request.param), Seq(
