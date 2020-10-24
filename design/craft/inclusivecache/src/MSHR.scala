@@ -184,17 +184,15 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val meta = Reg(new DirectoryResult(params))
 
   // outer probe
-  val outer_probe_toT = request.param === toT
-  val outer_probe_toB = request.param === toB
-  val outer_probe_toN = request.param === toN
+  val outer_probe_toT = RegInit(Bool(false))
+  val outer_probe_toB = RegInit(Bool(false))
+  val outer_probe_toN = RegInit(Bool(false))
 
   // if probe tried to cap permissions
   // we do nothing
   // 假如not hit，那我们是nothing状态，那么不管probe上来是啥cap，对我们来说，都是cap
-  val outer_probe_cap_permission = !meta.hit ||
-    ((meta.state === BRANCH && (outer_probe_toB || outer_probe_toT)) ||
-    ((meta.state === TRUNK || meta.state === TIP) && outer_probe_toT))
-  val outer_probe_shrink_permission = meta.hit && !outer_probe_cap_permission
+  val outer_probe_cap_permission = RegInit(Bool(false))
+  val outer_probe_shrink_permission = RegInit(Bool(false))
 
   // Define which states are valid
   // 这是啥意思？
@@ -749,6 +747,12 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     assert (!request_valid || (no_wait && io.schedule.fire()))
     request_valid := Bool(true)
     request := io.allocate.bits
+
+    outer_probe_toT := Bool(false)
+    outer_probe_toB := Bool(false)
+    outer_probe_toN := Bool(false)
+    outer_probe_cap_permission := Bool(false)
+    outer_probe_shrink_permission := Bool(false)
   }
 
   // Create execution plan
@@ -869,6 +873,13 @@ class MSHR(params: InclusiveCacheParameters) extends Module
         ((new_meta.state === BRANCH && (probe_toB || probe_toT)) ||
         ((new_meta.state === TRUNK || new_meta.state === TIP) && probe_toT))
       val isShrink = new_meta.hit && !isCap
+
+      // latch this results, meta may change along the way
+      outer_probe_toT := probe_toT
+      outer_probe_toB := probe_toB
+      outer_probe_toN := probe_toN
+      outer_probe_cap_permission := isCap
+      outer_probe_shrink_permission := isShrink
 
       // Do we need to actually do something?
       when (isShrink) {
