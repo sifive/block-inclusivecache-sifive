@@ -144,37 +144,37 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   }
 
   when (io.allocate.valid) {
-    DebugPrint(params, "MSHR allocate: ")
+    DebugPrint(params, "MSHR %d: allocate: ", io.mshr_id)
     io.allocate.bits.dump()
   }
 
   when (io.directory.valid) {
-    DebugPrint(params, "MSHR directory: ")
+    DebugPrint(params, "MSHR %d: directory: ", io.mshr_id)
     io.directory.bits.dump()
   }
 
   when (io.status.valid) {
-    DebugPrint(params, "MSHR status: ")
+    DebugPrint(params, "MSHR %d: status: ", io.mshr_id)
     io.status.bits.dump()
   }
 
   when (io.schedule.fire()) {
-    DebugPrint(params, "MSHR schedule: ")
+    DebugPrint(params, "MSHR %d: schedule: ", io.mshr_id)
     io.schedule.bits.dump()
   }
 
   when (io.sinkc.valid) {
-    DebugPrint(params, "MSHR sinkc: ")
+    DebugPrint(params, "MSHR %d: sinkc: ", io.mshr_id)
     io.sinkc.bits.dump()
   }
 
   when (io.sinkd.valid) {
-    DebugPrint(params, "MSHR sinkd: ")
+    DebugPrint(params, "MSHR %d: sinkd: ", io.mshr_id)
     io.sinkd.bits.dump()
   }
 
   when (io.sinke.valid) {
-    DebugPrint(params, "MSHR sinke: ")
+    DebugPrint(params, "MSHR %d: sinke: ", io.mshr_id)
     io.sinke.bits.dump()
   }
 
@@ -247,6 +247,9 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     DebugPrint(params, "MSHR %d: s_rprobe: %b w_rprobeackfirst: %b w_rprobeacklast: %b\n",
       io.mshr_id, s_rprobe, w_rprobeackfirst, w_rprobeacklast)
 
+    DebugPrint(params, "MSHR %d: request: ", io.mshr_id)
+    request.dump
+
     DebugPrint(params, "MSHR %d: s_release: %b w_releaseack: %b\n",
       io.mshr_id, s_release, w_releaseack)
 
@@ -261,6 +264,16 @@ class MSHR(params: InclusiveCacheParameters) extends Module
 
     DebugPrint(params, "MSHR %d: w_grantack: %b\n",
       io.mshr_id, w_grantack)
+
+    when (request.prio(1)) {
+      DebugPrint(params, "MSHR %d: outer_probe_toT: %b outer_probe_toB: %b outer_probe_toN: %b outer_probe_cap_permission: %b outer_probe_shrink_permission: %b\n",
+        io.mshr_id, outer_probe_toT, outer_probe_toB, outer_probe_toN, outer_probe_cap_permission, outer_probe_shrink_permission)
+    }
+  }
+
+  when (meta_valid) {
+    DebugPrint(params, "MSHR %d: meta: ", io.mshr_id)
+    meta.dump
   }
 
   // [1]: We cannot issue outer Acquire while holding blockB (=> outA can stall)
@@ -343,6 +356,10 @@ class MSHR(params: InclusiveCacheParameters) extends Module
 
   // Resulting meta-data
   val final_meta_writeback = Wire(init = meta)
+  when (request_valid) {
+    DebugPrint(params, "MSHR %d: final_meta_writeback: ", io.mshr_id)
+    final_meta_writeback.dump
+  }
 
   val req_clientBit = params.clientBit(request.source)
   val req_needT = needT(request.opcode, request.param)
