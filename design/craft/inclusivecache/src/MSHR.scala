@@ -303,7 +303,13 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.status.bits.set    := request.set
   io.status.bits.tag    := request.tag
   io.status.bits.way    := meta.way
+  // 估计block是低位有效的？
+  // 当meta invalid时，blockB是true？
+  // 当blockB是true时，就是不block？
   io.status.bits.blockB := !meta_valid || ((!w_releaseack || !w_rprobeacklast || !w_pprobeacklast) && !w_grantfirst)
+  // nestB估计也是0有效，即0时，允许nest
+  // 1时不允许nest
+  // 那看看这边的条件，应该是在这样的条件下不允许nest
   io.status.bits.nestB  := meta_valid && w_releaseack && w_rprobeacklast && w_pprobeacklast && !w_grantfirst
   // The above rules ensure we will block and not nest an outer probe while still doing our
   // own inner probes. Thus every probe wakes exactly one MSHR.
@@ -327,6 +333,9 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.d.valid := !s_execute && w_pprobeack && w_grant
   io.schedule.bits.e.valid := !s_grantack && w_grantfirst
   io.schedule.bits.x.valid := !s_flush && w_releaseack
+  // 第一个是release的时候，inner probe的数据已经回来了
+  // 第二个是probeAck时，inner probe数据回来了
+  // 第三个是可以write back了
   io.schedule.bits.dir.valid := (!s_release && w_rprobeackfirst) || (!s_probeack && w_pprobeackfirst) || (!s_writeback && no_wait)
   io.schedule.bits.reload := no_wait
   io.schedule.valid := io.schedule.bits.a.valid || io.schedule.bits.b.valid || io.schedule.bits.c.valid ||
@@ -483,6 +492,8 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.d.bits.bad     := bad_grant
   io.schedule.bits.e.bits.sink    := sink
   io.schedule.bits.x.bits.fail    := Bool(false)
+  // 当directory write时，如果是release和probeAck，invalid？那这也不对啊？
+  // 所以probeAck的meta data到底是啥时候写的啊。
   io.schedule.bits.dir.bits.set   := request.set
   io.schedule.bits.dir.bits.way   := meta.way
   io.schedule.bits.dir.bits.data  := Mux(!s_release || !s_probeack, invalid, Wire(new DirectoryEntry(params), init = final_meta_writeback))

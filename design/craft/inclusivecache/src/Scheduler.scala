@@ -258,6 +258,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 没有set match的
   val alloc = !setMatches.orR() // NOTE: no matches also means no BC or C pre-emption on this set
   // If a same-set MSHR says that requests of this type must be blocked (for bounded time), do it
+  // 这个block的意思是，现在要把这个给block住
   // prio是啥呢？
   // 如果某一个和request set match，那就把blockB、C选出来
   // prio 0 1 2都是什么鬼东西？
@@ -274,6 +275,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   // If a same-set MSHR says that requests of this type must be handled out-of-band, use special BC|C MSHR
   // ... these special MSHRs interlock the MSHR that said it should be pre-empted.
+  // nest是现在可以允许处理这个请求，但是在处理这个请求的时候，自己是被堵住的
   // 估计是每个mshr可以说自己这个是否要nest？
   // 估计假如不支持nest，就要另外分配mshr了？
   val nestB  = Mux1H(setMatches, mshrs.map(_.io.status.bits.nestB))  && request.bits.prio(1)
@@ -297,6 +299,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 只有A B C这几个请求开启流程是需要额外分配资源的，所以也就因此有优先级要遵守？
   // A请求不能阻塞B，是显然的，典型的例子就是
   // 可能blockB，nestC的意思是，它们现在支持B或者C进来？
+  // block和nest估计是低位有效，还有问题就是当nest时，inter lock是怎样lock的呢？
   val queue = lowerMatches.orR() && !nestB && !nestC && !blockB && !blockC
 
   if (!params.lastLevel) {
