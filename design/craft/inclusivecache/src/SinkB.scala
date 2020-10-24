@@ -39,7 +39,7 @@ class SinkB(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
   */
     
-  val b = params.micro.innerBuf.c(io.b)
+  val b = params.micro.innerBuf.b(io.b)
 
   val (tag, set, offset) = params.parseAddress(b.bits.address)
 
