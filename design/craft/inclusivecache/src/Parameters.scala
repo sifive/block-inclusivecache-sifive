@@ -161,6 +161,8 @@ case class InclusiveCacheParameters(
   val secondary = max(mshrs, micro.memCycles - mshrs)
   val putLists = micro.memCycles // allow every request to be single beat
   val putBeats = max(2*cache.blockBeats, micro.memCycles)
+  val grantLists = micro.memCycles // allow every request to be single beat
+  val grantBeats = max(2*cache.blockBeats, micro.memCycles)
   val relLists = 2
   val relBeats = relLists*cache.blockBeats
 

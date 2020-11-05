@@ -29,9 +29,10 @@ class SourceDRequest(params: InclusiveCacheParameters) extends FullRequest(param
   val sink = UInt(width = params.inner.bundle.sinkBits)
   val way  = UInt(width = params.wayBits)
   val bad  = Bool()
+  val uncached_get = Bool()
   override def dump() = {
-    DebugPrint(params, "SourceDRequest: prio: %x control: %b opcode: %x param: %x size: %x source: %x tag: %x set: %x offset: %x put: %x sink: %x way: %x bad: %b\n",
-      prio.asUInt, control, opcode, param, size, source, tag, set, offset, put, sink, way, bad)
+    DebugPrint(params, "SourceDRequest: prio: %x control: %b opcode: %x param: %x size: %x source: %x tag: %x set: %x offset: %x put: %x sink: %x way: %x bad: %b uncached_get: %b\n",
+      prio.asUInt, control, opcode, param, size, source, tag, set, offset, put, sink, way, bad, uncached_get)
   }
 }
 
@@ -63,14 +64,24 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
     val pb_pop = Decoupled(new PutBufferPop(params))
     val pb_beat = new PutBufferAEntry(params).flip
     // Release data from SinkC
+    // sourceD为什么要从sinkC这边拿数据呢？why？
+    // put还好理解，这个就真的不太好理解了啊。
     val rel_pop  = Decoupled(new PutBufferPop(params))
     val rel_beat = new PutBufferCEntry(params).flip
+
+    // sourceD为什么要从sinkC这边拿数据呢？why？
+    // put还好理解，这个就真的不太好理解了啊。
+    val gnt_pop  = Decoupled(new GrantBufferPop(params))
+    val gnt_beat = new GrantBufferDEntry(params).flip
+
     // Access to the BankedStore
     val bs_radr = Decoupled(new BankedStoreInnerAddress(params))
     val bs_rdat = new BankedStoreInnerDecoded(params).flip
+    // 所以对于put，amo之类的，数据写入是在这里完成的
     val bs_wadr = Decoupled(new BankedStoreInnerAddress(params))
     val bs_wdat = new BankedStoreInnerPoison(params)
     // Is it safe to evict/replace this way?
+    // 具体这边是怎么同步的，还是不太明白
     val evict_req  = new SourceDHazard(params).flip
     val evict_safe = Bool()
     val grant_req  = new SourceDHazard(params).flip
@@ -102,6 +113,11 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   when (io.rel_pop.fire()) {
     DebugPrint(params, "SourceD rel_pop:")
     io.rel_pop.bits.dump()
+  }
+
+  when (io.gnt_pop.fire()) {
+    DebugPrint(params, "SourceD gnt_pop:")
+    io.gnt_pop.bits.dump()
   }
 
   /*
@@ -191,16 +207,28 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // Reform the request beats
 
   // 所以这个其实就是阻塞的，一次只能处理一个请求
+  // 显然s1在fire的当拍就启动了
   val busy = RegInit(Bool(false))
   val s1_block_r = RegInit(Bool(false))
+  // 计数s1现在到了第几拍?
   val s1_counter = RegInit(UInt(0, width = params.innerBeatBits))
+  // 这边又是一个锁存的经典案例
   val s1_req_reg = RegEnable(io.req.bits, !busy && io.req.valid)
   val s1_req = Mux(!busy, io.req.bits, s1_req_reg)
+
+  // write bytes是sram存储的粒度，所以这个是要看每个sram block上是否有冲突？
   val s1_x_bypass = Wire(UInt(width = beatBytes/writeBytes)) // might go from high=>low during stall
+  // 这个是什么意思？
+  // 我们重点看这个什么时候变成true
+  // s2_ready or
+  // 这个条件着实有点奇怪
+  // !(busy || io.req.valid)即!busy && !io.req.valid
   val s1_latch_bypass = RegNext(!(busy || io.req.valid) || s2_ready)
+  // 所以s1 bypas是被latch了，第一拍用s1 x latch
   val s1_bypass = Mux(s1_latch_bypass, s1_x_bypass, RegEnable(s1_x_bypass, s1_latch_bypass))
 
   // 这边的offset是啥，难道不应该直接就block对齐就可以了嘛？哪儿来的offset呢？
+  // 估计是要处理下来的tilelink地址不对齐的问题？根据协议，addr应该只要按照size对齐就可以了
   // mask gen是根据这个地址，要读的mask
   // 然后s1 bypass是哪些数据可以bypass回来的mask
   // 与一下之后，假如全部可以bypass，那就不用读了
@@ -219,11 +247,14 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   //  剩下需要读的就是：
   //  Get，AcquireBlock（确实需要block的那种）,PutPartialData, ArithmeticData, LogicalData
   //  PutFullData也是可能需要读的，当Put full data要写的内容粒度太小，比最小写粒度还要小的话，就需要先读一下
+  //  TODO: 在这里把miss的get给过滤掉
   val s1_need_r = s1_mask.orR && s1_req.prio(0) && s1_req.opcode =/= Hint && !s1_grant &&
-                  (s1_req.opcode =/= PutFullData || s1_req.size < UInt(log2Ceil(writeBytes)))
+                  (s1_req.opcode =/= PutFullData || s1_req.size < UInt(log2Ceil(writeBytes))) &&
+                  !s1_req.uncached_get
 
   // valid这个信号是用来控制要不要读data array的
-  // 所以这里是的几个条件是，首先在req.valid的当拍就可以开始读了，然后要一直busy
+  // 所以这里是的几个条件是，首先在req.valid的当拍就可以开始读了
+  // 另外就是busy就说明s1 stage还在working，那就要一直读
   // 不对，在req valid的当拍读，不应该是在fire的时候读吗？
   // 这个s1 block r应该是，假如后面s2那边没有及时读出来的数据处理了，那现在读出来的数据暂存在queue里面
   // 然后这一拍就不用重复读了
@@ -233,15 +264,17 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // !s1_req.opcode(2)因为最高位是0的，都是write，包括了put，atomics
   // 请求还有可能是从C来的
   // 如果是从C来的,最后一位是1的，都是ProbeAckData和ReleaseData
-  val s1_need_pb = Mux(s1_req.prio(0), !s1_req.opcode(2), s1_req.opcode(0)) // hasData
+  // TODO: 在这里加上miss的get
+  val s1_need_pb = Mux(s1_req.prio(0), !s1_req.opcode(2) || (s1_req.opcode === Get && s1_req.uncached_get), s1_req.opcode(0)) // hasData
   // 从A channel来的请求，只有Hint或者直接给权限的那种是一拍结束
   // C通道来的请求只有Release是一拍结束
   val s1_single = Mux(s1_req.prio(0), s1_req.opcode === Hint || s1_grant, s1_req.opcode === Release)
+  // s1_retires是啥呢？
   val s1_retires = !s1_single // retire all operations with data in s3 for bypass (saves energy)
   // Alternatively: val s1_retires = s1_need_pb // retire only updates for bypass (less backpressure from WB)
   // 总共需要几beat
   val s1_beats1 = Mux(s1_single, UInt(0), UIntToOH1(s1_req.size, log2Up(params.cache.blockBytes)) >> log2Ceil(beatBytes))
-  // 前面的是算出开始是第几排，后面是配上现在传输到了第几拍
+  // 前面的是算出开始是第几拍，后面是配上现在传输到了第几拍
   val s1_beat = (s1_req.offset >> log2Ceil(beatBytes)) | s1_counter
   val s1_last = s1_counter === s1_beats1
   val s1_first = s1_counter === UInt(0)
@@ -261,6 +294,8 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   params.ccover(io.bs_radr.valid && !io.bs_radr.ready, "SOURCED_1_READ_STALL", "Data readout stalled")
 
   // Make a queue to catch BS readout during stalls
+  // 为什么是三项呢？
+  // 这个是flow queue了，所以数据是可以从头拉到尾巴的
   val queue = Module(new Queue(io.bs_rdat, 3, flow=true))
   // banked data store是延迟两拍后出数
   queue.io.enq.valid := RegNext(RegNext(io.bs_radr.fire()))
@@ -273,24 +308,30 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   when (io.bs_radr.fire()) { s1_block_r := Bool(true) }
   when (io.req.valid) { busy := Bool(true) }
   when (s1_valid && s2_ready) {
+    // 已经读了一拍了，开始读到下一拍
     s1_counter := s1_counter + UInt(1)
     s1_block_r := Bool(false)
     when (s1_last) {
+      // 读到最后一拍了
       s1_counter := UInt(0)
       busy := Bool(false)
     }
   }
 
+  // 只要当前还有请求在处理，就busy
+  // 也就是第一拍req valid，然后设置了busy
+  // 那我感觉还是能流水的，假如直接到了s1 last，那就busy一直是false了，就没有任何问题了
   params.ccover(s1_valid && !s2_ready, "SOURCED_1_STALL", "Stage 1 pipeline blocked")
 
   // 这边估计就是不看req fire，而是直接看req valid就可以了。估计是valid等待ready。只要valid有效了，就肯定fire
   io.req.ready := !busy
   // s1怎样算valid，busy，不需要读data或者可以读到banked store
+  // s1 valid就是成功fire了一拍，只要fire了一拍就可以向下走了
   s1_valid := (busy || io.req.valid) && (!s1_valid_r || io.bs_radr.ready)
 
   ////////////////////////////////////// STAGE 2 //////////////////////////////////////
   // Fetch the request data
-
+  // s2 latch指这一拍有数据从上面下来
   val s2_latch = s1_valid && s2_ready
   val s2_full = RegInit(Bool(false))
   val s2_valid_pb = RegInit(Bool(false))
@@ -306,13 +347,25 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   val s2_pdata = s2_pdata_raw holdUnless s2_valid_pb
 
   // 从SinkA和SinkC那里把put buffer的值拿出来
-  s2_pdata_raw.data    := Mux(s2_req.prio(0), io.pb_beat.data, io.rel_beat.data)
-  s2_pdata_raw.mask    := Mux(s2_req.prio(0), io.pb_beat.mask, ~UInt(0, width = params.inner.manager.beatBytes))
-  s2_pdata_raw.corrupt := Mux(s2_req.prio(0), io.pb_beat.corrupt, io.rel_beat.corrupt)
+  val uncached_get = s2_req.opcode === Get && s2_req.uncached_get
+  s2_pdata_raw.data    := Mux(s2_req.prio(0),
+    Mux(uncached_get, io.gnt_beat.data, io.pb_beat.data),
+    io.rel_beat.data)
+  // 只有sinkA那里来的数据有mask吗？
+  s2_pdata_raw.mask    := Mux(s2_req.prio(0) && !uncached_get, io.pb_beat.mask, ~UInt(0, width = params.inner.manager.beatBytes))
+  s2_pdata_raw.corrupt := Mux(s2_req.prio(0),
+    Mux(uncached_get, Bool(false), io.pb_beat.corrupt),
+    io.rel_beat.corrupt)
 
-  io.pb_pop.valid := s2_valid_pb && s2_req.prio(0)
+  // 拿完数据后，就释放一拍
+  io.pb_pop.valid := s2_valid_pb && s2_req.prio(0) && !uncached_get
   io.pb_pop.bits.index := s2_req.put
   io.pb_pop.bits.last  := s2_last
+
+  io.gnt_pop.valid := s2_valid_pb && s2_req.prio(0) && uncached_get
+  io.gnt_pop.bits.index := s2_req.put
+  io.gnt_pop.bits.last  := s2_last
+
   io.rel_pop.valid := s2_valid_pb && !s2_req.prio(0)
   io.rel_pop.bits.index := s2_req.put
   io.rel_pop.bits.last  := s2_last
@@ -321,7 +374,10 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   if (!params.firstLevel)
     params.ccover(io.rel_pop.valid && !io.rel_pop.ready, "SOURCED_2_PUTC_STALL", "Channel C put buffer was not ready in time")
 
-  val pb_ready = Mux(s2_req.prio(0), io.pb_pop.ready, io.rel_pop.ready)
+  // pb ready又是啥？
+  val pb_ready = Mux(s2_req.prio(0),
+    Mux(uncached_get, io.gnt_pop.ready, io.pb_pop.ready),
+    io.rel_pop.ready)
   when (pb_ready) { s2_valid_pb := Bool(false) }
   when (s2_valid && s3_ready) { s2_full := Bool(false) }
   when (s2_latch) { s2_valid_pb := s1_need_pb }

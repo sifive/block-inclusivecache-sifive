@@ -445,6 +445,8 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // Beat buffer connections between components
   sinkA.io.pb_pop <> sourceD.io.pb_pop
   sourceD.io.pb_beat := sinkA.io.pb_beat
+  sinkD.io.gb_pop <> sourceD.io.gnt_pop
+  sourceD.io.gnt_beat := sinkD.io.gb_beat
   sinkC.io.rel_pop <> sourceD.io.rel_pop
   sourceD.io.rel_beat := sinkC.io.rel_beat
 

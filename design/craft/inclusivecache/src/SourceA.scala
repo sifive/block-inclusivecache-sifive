@@ -26,10 +26,10 @@ class SourceARequest(params: InclusiveCacheParameters) extends InclusiveCacheBun
   val set    = UInt(width = params.setBits)
   val param  = UInt(width = 3)
   val source = UInt(width = params.outer.bundle.sourceBits)
-  val block  = Bool()
+  val opcode = UInt(width = 3)
   def dump() = {
-    DebugPrint(params, "SourceARequest: tag: %x set: %x param: %x source: %x block: %b\n",
-      tag, set, param, source, block)
+    DebugPrint(params, "SourceARequest: opcode: %d tag: %x set: %x param: %x source: %x\n",
+      opcode, tag, set, param, source)
   }
 }
 
@@ -62,7 +62,7 @@ class SourceA(params: InclusiveCacheParameters) extends Module with HasTLDump
   a.valid := io.req.valid
   params.ccover(a.valid && !a.ready, "SOURCEA_STALL", "Backpressured when issuing an Acquire")
 
-  a.bits.opcode  := Mux(io.req.bits.block, TLMessages.AcquireBlock, TLMessages.AcquirePerm)
+  a.bits.opcode  := io.req.bits.opcode
   a.bits.param   := io.req.bits.param
   a.bits.size    := UInt(params.offsetBits)
   a.bits.source  := io.req.bits.source

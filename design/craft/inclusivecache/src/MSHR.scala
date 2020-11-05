@@ -194,6 +194,10 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val outer_probe_cap_permission = RegInit(Bool(false))
   val outer_probe_shrink_permission = RegInit(Bool(false))
 
+  // uncacheGet
+  // if a get missed, it pass through cache without data cached
+  val uncached_get = RegInit(Bool(false))
+
   // Define which states are valid
   // 这是啥意思？
   // branch, trunk, tip到底是啥意思啊？
@@ -448,12 +452,16 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   // The client asking us to act is proof they don't have permissions.
   // 就是对于请求的client，是否要probe它们自己
   // 这个主要是为了避免重复的probe
+  val block = request.size =/= UInt(log2Ceil(params.cache.blockBytes)) ||
+    !(request.opcode === PutFullData || request.opcode === AcquirePerm)
   val excluded_client = Mux(meta.hit && request.prio(0) && skipProbeN(request.opcode), req_clientBit, UInt(0))
   io.schedule.bits.a.bits.tag     := request.tag
   io.schedule.bits.a.bits.set     := request.set
-  io.schedule.bits.a.bits.param   := Mux(req_needT, Mux(meta.hit, BtoT, NtoT), NtoB)
-  io.schedule.bits.a.bits.block   := request.size =/= UInt(log2Ceil(params.cache.blockBytes)) ||
-                                     !(request.opcode === PutFullData || request.opcode === AcquirePerm)
+  // Get should always set param to zero
+  io.schedule.bits.a.bits.param   := Mux(request.opcode === Get, 0.U,
+    Mux(req_needT, Mux(meta.hit, BtoT, NtoT), NtoB))
+  io.schedule.bits.a.bits.opcode  := Mux(request.opcode === Get, Get,
+    Mux(block, AcquireBlock, AcquirePerm))
   io.schedule.bits.a.bits.source  := UInt(0)
   // 如果是rprobe，那就是要替换，那就是直接toN
   // request.prio(1)是1，是啥意思？
@@ -494,6 +502,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.d.bits.sink    := UInt(0)
   io.schedule.bits.d.bits.way     := meta.way
   io.schedule.bits.d.bits.bad     := bad_grant
+  io.schedule.bits.d.bits.uncached_get := uncached_get
   io.schedule.bits.e.bits.sink    := sink
   io.schedule.bits.x.bits.fail    := Bool(false)
   // 当directory write时，如果是release和probeAck，invalid？那这也不对啊？
@@ -713,6 +722,16 @@ class MSHR(params: InclusiveCacheParameters) extends Module
       params.ccover(io.sinkd.bits.opcode === GrantData && request.offset =/= UInt(0), "MSHR_GRANT_SERIAL", "Sequential routing of grant response data")
       gotT := io.sinkd.bits.param === toT
     }
+    .elsewhen (io.sinkd.bits.opcode === AccessAckData) {
+      sink := io.sinkd.bits.sink
+      w_grantfirst := Bool(true)
+      w_grantlast := io.sinkd.bits.last
+      // Record if we need to prevent taking ownership
+      bad_grant := io.sinkd.bits.denied
+      // do not allow wormhole routing
+      w_grant := io.sinkd.bits.last
+      request.put := io.sinkd.bits.grant
+    }
     .elsewhen (io.sinkd.bits.opcode === ReleaseAck) {
       w_releaseack := Bool(true)
     }
@@ -768,6 +787,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     outer_probe_toN := Bool(false)
     outer_probe_cap_permission := Bool(false)
     outer_probe_shrink_permission := Bool(false)
+    uncached_get := Bool(false)
   }
 
   // Create execution plan
@@ -928,7 +948,10 @@ class MSHR(params: InclusiveCacheParameters) extends Module
       // 说明我们命中的这个块儿肯定是别的块儿
       // 这个块儿需要被release
       // release这里就不需要标注write back了，因为早晚会被write back吗？
-      when (!new_meta.hit && new_meta.state =/= INVALID) {
+
+      // Get are uncached, we does not needs to allocate lines for it
+      uncached_get := !new_meta.hit && new_request.opcode === TLMessages.Get
+      when (!new_meta.hit && new_meta.state =/= INVALID && new_request.opcode =/= TLMessages.Get) {
         s_release := Bool(false)
         w_releaseack := Bool(false)
         // Do we need to shoot-down inner caches?
@@ -954,12 +977,18 @@ class MSHR(params: InclusiveCacheParameters) extends Module
       // 毕竟按照我们现在的设计，只要到我们这儿的请求，我们肯定都会get的
       // 所以应该就是肯定是acquire block，不过权限方面，对于get，我们可以考虑拿shared，而不是每个块儿都拿exclusive
       when (!new_meta.hit || (new_meta.state === BRANCH && new_needT)) {
+        // 这里我们要进行细分
+        // 对于get，我们走uncached的get
+        // 对于其他的，我们走cached的acquire
         s_acquire := Bool(false)
         w_grantfirst := Bool(false)
         w_grantlast := Bool(false)
         w_grant := Bool(false)
-        s_grantack := Bool(false)
-        s_writeback := Bool(false)
+        // 我感觉对于get，也没有任何writeback的必要啊
+        when (new_request.opcode =/= TLMessages.Get) {
+          s_grantack := Bool(false)
+          s_writeback := Bool(false)
+        }
       }
       // Do we need a probe?
       // 如果我们需要tip权限，并且client有拿着块儿的
@@ -979,6 +1008,10 @@ class MSHR(params: InclusiveCacheParameters) extends Module
       // 是否要等待内部发grantAck
       // uncache的请求是只要A和D就可以了
       // E是需要等待grantAck的
+      // 只有对于Acquire block请求是需要write back的，其他的都不需要write back，那么问题来了
+      // 其他请求是怎样将这个mshr给释放掉的呢？
+      // 它们的释放，靠的是，schedule grant时就OK了。
+      // 所以我怀疑write back，只有在确定要改meta时，才标记吗？
       when (new_request.opcode === AcquireBlock || new_request.opcode === AcquirePerm) {
         w_grantack := Bool(false)
         s_writeback := Bool(false)
