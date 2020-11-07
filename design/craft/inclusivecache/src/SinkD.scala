@@ -113,9 +113,10 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
   */
 
-  when (io.gb_pop.fire()){
+  when (io.gb_pop.fire()) {
     DebugPrint(params, "sinkD gb_pop ")
     io.gb_pop.bits.dump
+    DebugPrint(params, "sinkD gb_beat: %x ", io.gb_beat.data)
   }
 
 
@@ -225,6 +226,15 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   grantbuffer.io.push.bits.index := grant
   grantbuffer.io.push.bits.data.data := fullBeat
+
+  when (d.fire()) {
+    DebugPrint(params, "sinkD first: %b uncache: %b hasData: %b beatFull: %b\n",
+      first, uncache, hasData, beatFull)
+  }
+  when (grantbuffer.io.push.valid) {
+    DebugPrint(params, "sinkD grantbuffer push index: %d data: %x\n",
+      grantbuffer.io.push.bits.index, grantbuffer.io.push.bits.data.data)
+  }
 
   // Grant access to pop the data
   // 当数据收集全了后，就要pop，这个数据是怎么pop出来的呢？是子写进去的吗？肯定不是，肯定还得有替换算法的。
