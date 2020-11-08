@@ -215,7 +215,7 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   val refill_data = Reg(Vec(split, UInt(outerBeatWidth.W)))
   val splitBits = log2Floor(split)
   val beatIndex = if (splitBits == 0) 0.U else beat(splitBits - 1, 0)
-  val beatFull = if (splitBits == 0) true.B else beatIndex === (splitBits - 1).U
+  val beatFull = if (splitBits == 0) true.B else beatIndex === (split - 1).U
   when (d.fire() && uncache && hasData) {
     refill_data(beatIndex) := d.bits.data
   }
@@ -224,7 +224,7 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   grantbuffer.io.push.valid := RegNext(next = d.fire() && uncache && hasData && beatFull, init = false.B)
   when (d.fire() && uncache && hasData && first) { lists_set := freeOH }
 
-  grantbuffer.io.push.bits.index := grant
+  grantbuffer.io.push.bits.index := RegNext(grant)
   grantbuffer.io.push.bits.data.data := fullBeat
 
   when (d.fire()) {
