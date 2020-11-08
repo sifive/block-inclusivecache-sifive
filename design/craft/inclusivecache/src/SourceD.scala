@@ -236,6 +236,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 不需要任何操作，直接给response纠结可以的
   // 这边的opcode似乎不是d的opcode，而是直接把请求的opcode传到这里，再来判断
   val s1_grant = (s1_req.opcode === AcquireBlock && s1_req.param === BtoT) || s1_req.opcode === AcquirePerm
+  val s1_uncached_get = s1_req.opcode === Get && s1_req.uncached_get
   // 只有acquire是prio 0
   // Hint是不需要数据吗？
   // put full data也是走的A通道，最终也会走D
@@ -250,7 +251,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   //  TODO: 在这里把miss的get给过滤掉
   val s1_need_r = s1_mask.orR && s1_req.prio(0) && s1_req.opcode =/= Hint && !s1_grant &&
                   (s1_req.opcode =/= PutFullData || s1_req.size < UInt(log2Ceil(writeBytes))) &&
-                  !s1_req.uncached_get
+                  !s1_uncached_get
 
   // valid这个信号是用来控制要不要读data array的
   // 所以这里是的几个条件是，首先在req.valid的当拍就可以开始读了
@@ -265,7 +266,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 请求还有可能是从C来的
   // 如果是从C来的,最后一位是1的，都是ProbeAckData和ReleaseData
   // TODO: 在这里加上miss的get
-  val s1_need_pb = Mux(s1_req.prio(0), !s1_req.opcode(2) || (s1_req.opcode === Get && s1_req.uncached_get), s1_req.opcode(0)) // hasData
+  val s1_need_pb = Mux(s1_req.prio(0), !s1_req.opcode(2) || s1_uncached_get, s1_req.opcode(0)) // hasData
   // 从A channel来的请求，只有Hint或者直接给权限的那种是一拍结束
   // C通道来的请求只有Release是一拍结束
   val s1_single = Mux(s1_req.prio(0), s1_req.opcode === Hint || s1_grant, s1_req.opcode === Release)
@@ -329,6 +330,15 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // s1 valid就是成功fire了一拍，只要fire了一拍就可以向下走了
   s1_valid := (busy || io.req.valid) && (!s1_valid_r || io.bs_radr.ready)
 
+  when (s1_valid) {
+    DebugPrint(params, "SourceD s1: busy: %x s1_uncached_get: %b s1_block_r: %x s1_counter: %x s1_req_source: %x s1_x_bypass: %x s1_latch_bypass: %x s1_bypass: %x s1_mask: %x s1_grant: %x s1_need_r: %x s1_valid_r: %x s1_need_pb: %x s1_single: %x s1_retires: %x s1_beats1: %x s1_beat: %x s1_last: %x s1_first: %x\n",
+      busy, s1_uncached_get, s1_block_r, s1_counter, s1_req.source, s1_x_bypass, s1_latch_bypass, s1_bypass, s1_mask, s1_grant, s1_need_r, s1_valid_r, s1_need_pb, s1_single, s1_retires, s1_beats1, s1_beat, s1_last, s1_first)
+  }
+  when (s1_valid) {
+    assert(!(s1_uncached_get && s1_bypass.orR))
+  }
+
+
   ////////////////////////////////////// STAGE 2 //////////////////////////////////////
   // Fetch the request data
   // s2 latch指这一拍有数据从上面下来
@@ -342,27 +352,27 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   val s2_need_r = RegEnable(s1_need_r, s2_latch)
   val s2_need_pb = RegEnable(s1_need_pb, s2_latch)
   val s2_retires = RegEnable(s1_retires, s2_latch)
-  val s2_need_d = RegEnable(!s1_need_pb || s1_first, s2_latch)
+  val s2_need_d = RegEnable(!s1_need_pb || s1_first || s1_uncached_get, s2_latch)
+  val s2_uncached_get = RegEnable(s1_uncached_get, s2_latch)
   val s2_pdata_raw = Wire(new PutBufferACEntry(params))
   val s2_pdata = s2_pdata_raw holdUnless s2_valid_pb
 
-  // 从SinkA和SinkC那里把put buffer的值拿出来
-  val uncached_get = s2_req.opcode === Get && s2_req.uncached_get
+  // 从SinkA, SinkC, SinkD那里把put buffer的值拿出来
   s2_pdata_raw.data    := Mux(s2_req.prio(0),
-    Mux(uncached_get, io.gnt_beat.data, io.pb_beat.data),
+    Mux(s2_uncached_get, io.gnt_beat.data, io.pb_beat.data),
     io.rel_beat.data)
   // 只有sinkA那里来的数据有mask吗？
-  s2_pdata_raw.mask    := Mux(s2_req.prio(0) && !uncached_get, io.pb_beat.mask, ~UInt(0, width = params.inner.manager.beatBytes))
+  s2_pdata_raw.mask    := Mux(s2_req.prio(0) && !s2_uncached_get, io.pb_beat.mask, ~UInt(0, width = params.inner.manager.beatBytes))
   s2_pdata_raw.corrupt := Mux(s2_req.prio(0),
-    Mux(uncached_get, Bool(false), io.pb_beat.corrupt),
+    Mux(s2_uncached_get, Bool(false), io.pb_beat.corrupt),
     io.rel_beat.corrupt)
 
   // 拿完数据后，就释放一拍
-  io.pb_pop.valid := s2_valid_pb && s2_req.prio(0) && !uncached_get
+  io.pb_pop.valid := s2_valid_pb && s2_req.prio(0) && !s2_uncached_get
   io.pb_pop.bits.index := s2_req.put
   io.pb_pop.bits.last  := s2_last
 
-  io.gnt_pop.valid := s2_valid_pb && s2_req.prio(0) && uncached_get
+  io.gnt_pop.valid := s2_valid_pb && s2_req.prio(0) && s2_uncached_get
   io.gnt_pop.bits.index := s2_req.put
   io.gnt_pop.bits.last  := s2_last
 
@@ -376,7 +386,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   // pb ready又是啥？
   val pb_ready = Mux(s2_req.prio(0),
-    Mux(uncached_get, io.gnt_pop.ready, io.pb_pop.ready),
+    Mux(s2_uncached_get, io.gnt_pop.ready, io.pb_pop.ready),
     io.rel_pop.ready)
   when (pb_ready) { s2_valid_pb := Bool(false) }
   when (s2_valid && s3_ready) { s2_full := Bool(false) }
@@ -397,11 +407,21 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 另外就是当等待pb时，不能ready
   s2_ready := !s2_full || (s3_ready && (!s2_valid_pb || pb_ready))
 
+  when (s2_valid) {
+    DebugPrint(params, "SourceD s2: s2_latch: %x, s2_full: %x, s2_valid_pb: %x, s2_beat: %x, s2_bypass: %x, s2_req_source: %x, s2_last: %x, s2_need_r: %x, s2_need_pb: %x, s2_retires: %x, s2_need_d: %x, s2_pdata_raw_data: %x, s2_pdata_data: %x, s2_uncached_get: %x, s2_valid: %x, s2_ready: %x\n",
+      s2_latch, s2_full, s2_valid_pb, s2_beat, s2_bypass, s2_req.source, s2_last, s2_need_r, s2_need_pb, s2_retires, s2_need_d, s2_pdata_raw.data, s2_pdata.data, s2_uncached_get, s2_valid, s2_ready)
+  }
+  when (s2_valid) {
+    assert(!(s2_uncached_get && s2_bypass.orR))
+  }
+
   ////////////////////////////////////// STAGE 3 //////////////////////////////////////
   // Send D response
   // 在stage 3开始send response了
 
+  // 这个latch就是fire的意思
   val s3_latch = s2_valid && s3_ready
+  // 这个表明这一级是否有数据
   val s3_full = RegInit(Bool(false))
   val s3_valid_d = RegInit(Bool(false))
   val s3_beat = RegEnable(s2_beat, s3_latch)
@@ -413,8 +433,9 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   val s3_need_pb = RegEnable(s2_need_pb, s3_latch)
   val s3_retires = RegEnable(s2_retires, s3_latch)
   val s3_need_r = RegEnable(s2_need_r, s3_latch)
+  val s3_uncached_get = RegEnable(s2_uncached_get, s3_latch)
   // 这个need bs，估计意思是要不要写data array？
-  val s3_need_bs = s3_need_pb
+  val s3_need_bs = s3_need_pb && !s3_uncached_get
   val s3_acq = s3_req.opcode === AcquireBlock || s3_req.opcode === AcquirePerm
 
   // 这个就是个流水线，所以得处理数据的bypass
@@ -425,7 +446,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   def chop (x: UInt): Seq[Bool] = Seq.tabulate(beatBytes/writeBytes) { i => x(i) }
   def bypass(sel: UInt, x: UInt, y: UInt) =
     (chop(sel) zip (chunk(x) zip chunk(y))) .map { case (s, (x, y)) => Mux(s, x, y) } .asUInt
-  val s3_rdata = bypass(s3_bypass, s3_bypass_data, queue.io.deq.bits.data)
+  val s3_rdata = Mux(s3_uncached_get, s3_pdata.data, bypass(s3_bypass, s3_bypass_data, queue.io.deq.bits.data))
 
   // Lookup table for response codes
   val grant = Mux(s3_req.param === BtoT, Grant, GrantData)
@@ -435,6 +456,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   val d = Wire(io.d)
   io.d <> params.micro.innerBuf.d(d)
 
+  // s3 valid d，s3现在放到d上的message是否是valid
   d.valid := s3_valid_d
   d.bits.opcode  := Mux(s3_req.prio(0), resp_opcode(s3_req.opcode), ReleaseAck)
   d.bits.param   := Mux(s3_req.prio(0) && s3_acq, Mux(s3_req.param =/= NtoB, toT, toB), UInt(0))
@@ -444,6 +466,14 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
   d.bits.denied  := s3_req.bad
   d.bits.data    := s3_rdata
   d.bits.corrupt := s3_req.bad && d.bits.opcode(0)
+
+  when (s3_valid) {
+    DebugPrint(params, "SourceD s3: s3_latch: %x, s3_full: %x, s3_valid_d: %x, s3_uncached_get: %x, s3_beat: %x, s3_bypass: %x, s3_req_source: %x, s3_adjusted_opcode: %x, s3_last: %x, s3_pdata_data: %x, s3_need_pb: %x, s3_retires: %x, s3_need_r: %x, s3_need_bs: %x, s3_acq: %x, s3_bypass_data: %x, s3_rdata: %x, grant: %x\n",
+      s3_latch, s3_full, s3_valid_d, s3_uncached_get, s3_beat, s3_bypass, s3_req.source, s3_adjusted_opcode, s3_last, s3_pdata.data, s3_need_pb, s3_retires, s3_need_r, s3_need_bs, s3_acq, s3_bypass_data, s3_rdata, grant)
+  }
+  when (s3_valid) {
+    assert(!(s3_uncached_get && s3_bypass.orR))
+  }
 
   // 数据是从queue里面出来的
   queue.io.deq.ready := s3_valid && s4_ready && s3_need_r
@@ -456,13 +486,14 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   params.ccover(s3_valid && !s4_ready, "SOURCED_3_STALL", "Stage 3 pipeline blocked")
 
+  // s3 valid意味着处理完这一级的了，可以向下passdown了
   s3_valid := s3_full && (!s3_valid_d || d.ready)
   s3_ready := !s3_full || (s4_ready && (!s3_valid_d || d.ready))
 
   ////////////////////////////////////// STAGE 4 //////////////////////////////////////
   // Writeback updated data
 
-  val s4_latch = s3_valid && s3_retires && s4_ready
+  val s4_latch = s3_valid && s3_retires && s4_ready && !s3_uncached_get
   val s4_full = RegInit(Bool(false))
   val s4_beat = RegEnable(s3_beat, s4_latch)
   val s4_need_r = RegEnable(s3_need_r, s4_latch)
