@@ -27,6 +27,7 @@ import freechips.rocketchip.regmapper._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.subsystem.BankedL2Key
 import freechips.rocketchip.util._
+import freechips.rocketchip.util.Token.TokensInterpolator
 
 class InclusiveCache(
   val cache: CacheParameters,
@@ -222,7 +223,7 @@ class InclusiveCache(
       scheduler
     }
 
-    def json = s"""{"banks":[${mods.map(_.json).mkString(",")}]"""
+    def json: Seq[Token] = tokens"""{"banks":[${mods.map(_.json).reduce((a, b) => tokens"$a,$b")}]"""
   }
 
   def logicalTreeNode: InclusiveCacheLogicalTreeNode = new InclusiveCacheLogicalTreeNode(

@@ -21,6 +21,7 @@ import Chisel._
 import freechips.rocketchip.diplomacy.AddressSet
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
+import freechips.rocketchip.util.Token.TokensInterpolator
 
 class Scheduler(params: InclusiveCacheParameters) extends Module
 {
@@ -332,10 +333,10 @@ class Scheduler(params: InclusiveCacheParameters) extends Module
   sourceC.io.evict_safe := sourceD.io.evict_safe
   sinkD  .io.grant_safe := sourceD.io.grant_safe
 
-  private def afmt(x: AddressSet) = s"""{"base":${x.base},"mask":${x.mask}}"""
-  private def addresses = params.inner.manager.managers.flatMap(_.address).map(afmt _).mkString(",")
-  private def setBits = params.addressMapping.drop(params.offsetBits).take(params.setBits).mkString(",")
-  private def tagBits = params.addressMapping.drop(params.offsetBits + params.setBits).take(params.tagBits).mkString(",")
-  private def simple = s""""reset":"${reset.pathName}","tagBits":[${tagBits}],"setBits":[${setBits}],"blockBytes":${params.cache.blockBytes},"ways":${params.cache.ways}"""
-  def json: String = s"""{"addresses":[${addresses}],${simple},"directory":${directory.json},"subbanks":${bankedStore.json}}"""
+  private def afmt(x: AddressSet) = tokens"""{"base":${x.base},"mask":${x.mask}}"""
+  private def addresses = params.inner.manager.managers.flatMap(_.address).map(afmt _).recduce((a, b) => tokens"$a,$b")
+  private def setBits = params.addressMapping.drop(params.offsetBits).take(params.setBits).recduce((a, b) => tokens"$a,$b")
+  private def tagBits = params.addressMapping.drop(params.offsetBits + params.setBits).take(params.tagBits).recduce((a, b) => tokens"$a,$b")
+  private def simple = tokens""""reset":"${reset}","tagBits":[${tagBits}],"setBits":[${setBits}],"blockBytes":${params.cache.blockBytes},"ways":${params.cache.ways}"""
+  def json: Seq[Token] = tokens"""{"addresses":[${addresses}],${simple},"directory":${directory.json},"subbanks":${bankedStore.json}}"""
 }

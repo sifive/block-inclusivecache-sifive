@@ -128,7 +128,7 @@ class WithInclusiveCache(
       _ := cbus.coupleTo("l2_ctrl") { TLBuffer(1) := TLFragmenter(cbus) := _ }
     }
 
-    ElaborationArtefacts.add("l2.json", l2.module.json)
+    ElaborationArtefactAnnotation.annotate("l2.json", l2.module.json)
     (filter.node, lastLevelNode, None)
   })
 })
