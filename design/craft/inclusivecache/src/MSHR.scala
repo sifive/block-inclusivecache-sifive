@@ -407,19 +407,22 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     }
     final_meta_writeback.hit := Bool(false)
   } .otherwise {
-    final_meta_writeback.dirty := (meta.hit && meta.dirty) || !request.opcode(2)
-    final_meta_writeback.state := Mux(req_needT,
-                                    Mux(req_acquire, TRUNK, TIP),
-                                    Mux(!meta.hit, Mux(gotT, Mux(req_acquire, TRUNK, TIP), BRANCH),
-                                      MuxLookup(meta.state, UInt(0, width=2), Seq(
-                                        INVALID -> BRANCH,
-                                        BRANCH  -> BRANCH,
-                                        TRUNK   -> TIP,
-                                        TIP     -> Mux(meta_no_clients && req_acquire, TRUNK, TIP)))))
-    final_meta_writeback.clients := Mux(meta.hit, meta.clients & ~probes_toN, UInt(0)) |
-                                    Mux(req_acquire, req_clientBit, UInt(0))
-    final_meta_writeback.tag := request.tag
-    final_meta_writeback.hit := Bool(true)
+    // for uncached get, we do not change meta data
+    when (!uncached_get) {
+      final_meta_writeback.dirty := (meta.hit && meta.dirty) || !request.opcode(2)
+      final_meta_writeback.state := Mux(req_needT,
+                                      Mux(req_acquire, TRUNK, TIP),
+                                      Mux(!meta.hit, Mux(gotT, Mux(req_acquire, TRUNK, TIP), BRANCH),
+                                        MuxLookup(meta.state, UInt(0, width=2), Seq(
+                                          INVALID -> BRANCH,
+                                          BRANCH  -> BRANCH,
+                                          TRUNK   -> TIP,
+                                          TIP     -> Mux(meta_no_clients && req_acquire, TRUNK, TIP)))))
+      final_meta_writeback.clients := Mux(meta.hit, meta.clients & ~probes_toN, UInt(0)) |
+                                      Mux(req_acquire, req_clientBit, UInt(0))
+      final_meta_writeback.tag := request.tag
+      final_meta_writeback.hit := Bool(true)
+    }
   }
 
   when (bad_grant) {
