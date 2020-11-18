@@ -766,7 +766,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   }
 
 
-  when (io.allocate.valid && io.allocate.bits.repeat) {
+  when (io.allocate.valid && io.allocate.bits.repeat && !uncached_get) {
     bypass(S_INVALID,   f || p) // Can lose permissions (probe/flush)
     bypass(S_BRANCH,    b)      // MMIO read to read-only device
     bypass(S_BRANCH_C,  b && c) // you need children to become C
