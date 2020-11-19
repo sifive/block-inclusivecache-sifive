@@ -31,13 +31,105 @@ class GrantBufferDEntry(params: InclusiveCacheParameters) extends InclusiveCache
   }
 }
 
-class GrantBufferPop(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
+// Instead of using ListBuffer just as putBuffer and releaseBuffer does,
+// we implemented a new grant buffer.
+// With this buffer, sourceD can choose which beat to use,
+// instead of consuming one by one.
+// Suitable for sub-block level get
+class GrantBufferAllocate(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
   val index = UInt(width = params.putBits)
+  def dump() = {
+    DebugPrint(params, "GrantBufferAllocate: index: %d\n", index)
+  }
+}
+
+class GrantBufferPush(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
+{
+  val nBeats = params.cache.blockBytes * 8 / params.inner.bundle.dataBits
+  val index = UInt(width = params.putBits)
+  val beat = UInt(width = log2Up(nBeats))
+  val data = UInt(width = params.inner.bundle.dataBits)
+  def dump() = {
+    DebugPrint(params, "GrantBufferPush: index: %d beat: %d data: %x\n",
+      index, beat, data)
+  }
+}
+
+class GrantBufferPop(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
+{
+  val nBeats = params.cache.blockBytes * 8 / params.inner.bundle.dataBits
+
+  val index = UInt(width = params.putBits)
+  val beat = UInt(width = log2Up(nBeats))
   val last = Bool()
   def dump() = {
-    DebugPrint(params, "GrantBufferAEntry: index: %x last: %b\n",
-      index, last)
+    DebugPrint(params, "GrantBufferPop: index: %d beat: %d last: %b\n",
+      index, beat, last)
+  }
+}
+
+class GrantBuffer(params: InclusiveCacheParameters) extends Module
+{
+  val io = new Bundle {
+    val allocate = Decoupled(new GrantBufferAllocate(params))
+    val push = Decoupled(new GrantBufferPush(params)).flip
+    val pop = Decoupled(new GrantBufferPop(params)).flip
+    val beat = new GrantBufferDEntry(params)
+  }
+  val nBeats = params.cache.blockBytes * 8 / params.inner.bundle.dataBits
+  val buffer = Reg(Vec(params.grantLists, Vec(nBeats, UInt(width = params.inner.bundle.dataBits))))
+
+  // list allocation and free
+  val lists = RegInit(UInt(0, width = params.grantLists))
+  val lists_set = Wire(init = UInt(0, width = params.grantLists))
+  val lists_clr = Wire(init = UInt(0, width = params.grantLists))
+  lists := (lists | lists_set) & ~lists_clr
+
+  val free = !lists.andR()
+  val freeOH = ~(leftOR(~lists) << 1) & ~lists
+  val freeIdx = OHToUInt(freeOH)
+
+  io.allocate.valid := free
+  io.allocate.bits.index := freeIdx
+
+  when (io.allocate.fire()) {
+    lists_set := freeOH
+  }
+
+  // list free
+  when (io.pop.fire() && io.pop.bits.last) {
+    lists_clr := UIntToOH(io.pop.bits.index, params.grantLists)
+  }
+
+  // push data beat
+  val push = io.push.bits
+  io.push.ready := true.B
+  when (io.push.fire()) {
+    buffer(push.index)(push.beat) := push.data
+  }
+
+  // pop data beat
+  val pop = io.pop.bits
+  io.pop.ready := true.B
+  io.beat.data := 0.U
+  when (io.pop.fire()) {
+    io.beat.data := buffer(pop.index)(pop.beat)
+  }
+
+  // dump
+  when (io.allocate.fire()) {
+    io.allocate.bits.dump()
+  }
+
+  when (io.push.fire()) {
+    io.push.bits.dump()
+  }
+
+  when (io.pop.fire()) {
+    io.pop.bits.dump()
+    DebugPrint(params, "GrantBufferPop: data: %x\n",
+      io.beat.data)
   }
 }
 
@@ -123,23 +215,9 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // No restrictions on buffer
   val d = params.micro.outerBuf.d(io.d)
 
-  // 这边的put buffer entry，是用来存放写的数据的
-  // 总共可以存放有putList个请求
-  val grantbuffer = Module(new ListBuffer(ListBufferParameters(new GrantBufferDEntry(params), params.grantLists, params.grantBeats, false)))
-  // 这个是标识了哪些list在working
-  val lists = RegInit(UInt(0, width = params.grantLists))
+  val grantbuffer = Module(new GrantBuffer(params))
 
-  // lists_set轨迹是这一周期分配哪个list出去
-  // lists_clr是这一周期有哪个lists被释放出去
-  val lists_set = Wire(init = UInt(0, width = params.grantLists))
-  val lists_clr = Wire(init = UInt(0, width = params.grantLists))
-  lists := (lists | lists_set) & ~lists_clr
-
-  val free = !lists.andR()
-  // 还是有点不知道这个left OR是用来干啥的？
-  // 需要专家来解读一下
-  val freeOH = ~(leftOR(~lists) << 1) & ~lists
-  val freeIdx = OHToUInt(freeOH)
+  val freeIdx = grantbuffer.io.allocate.bits.index
   val (first, last, _, beat) = params.outer.count(d)
   val hasData = params.outer.hasData(d.bits)
   val grant = Mux(first, freeIdx, RegEnable(freeIdx, first))
@@ -162,7 +240,7 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   // buf block则是要保存数据，这个只要有数据，就得保存
   val buf_block = hasData && !grantbuffer.io.push.ready
   // set block是建立保存的list，这个只有对于第一拍需要建立list
-  val set_block = hasData && first && !free
+  val set_block = hasData && first && !grantbuffer.io.allocate.valid
 
   params.ccover(d.valid && resp_block, "SINKD_REQ_STALL", "Grant not safe for sink response")
   params.ccover(d.valid && buf_block, "SINKD_BUF_STALL", "No space in grantbuffer for beat")
@@ -211,7 +289,6 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   // grantBuffer
   // ---------------------------------------------
-
   val refill_data = Reg(Vec(split, UInt(outerBeatWidth.W)))
   val splitBits = log2Floor(split)
   val beatIndex = if (splitBits == 0) 0.U else beat(splitBits - 1, 0)
@@ -221,29 +298,20 @@ class SinkD(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
   val fullBeat = Cat((0 until split).reverse map { i => refill_data(i) })
 
-  grantbuffer.io.push.valid := RegNext(next = d.fire() && uncache && hasData && beatFull, init = false.B)
-  when (d.fire() && uncache && hasData && first) { lists_set := freeOH }
+  grantbuffer.io.allocate.ready := d.fire() && uncache && hasData && first
 
+  grantbuffer.io.push.valid := RegNext(next = d.fire() && uncache && hasData && beatFull, init = false.B)
   grantbuffer.io.push.bits.index := RegNext(grant)
-  grantbuffer.io.push.bits.data.data := fullBeat
+  grantbuffer.io.push.bits.beat := RegNext(beat >> splitBits)
+  grantbuffer.io.push.bits.data := fullBeat
 
   when (d.fire()) {
     DebugPrint(params, "sinkD first: %b uncache: %b hasData: %b beatFull: %b\n",
       first, uncache, hasData, beatFull)
   }
-  when (grantbuffer.io.push.valid) {
-    DebugPrint(params, "sinkD grantbuffer push index: %d data: %x\n",
-      grantbuffer.io.push.bits.index, grantbuffer.io.push.bits.data.data)
-  }
 
   // Grant access to pop the data
   // 当数据收集全了后，就要pop，这个数据是怎么pop出来的呢？是子写进去的吗？肯定不是，肯定还得有替换算法的。
-  grantbuffer.io.pop.bits := io.gb_pop.bits.index
-  grantbuffer.io.pop.valid := io.gb_pop.fire()
-  io.gb_pop.ready := grantbuffer.io.valid(io.gb_pop.bits.index)
-  io.gb_beat := grantbuffer.io.data
-
-  when (io.gb_pop.fire() && io.gb_pop.bits.last) {
-    lists_clr := UIntToOH(io.gb_pop.bits.index, params.grantLists)
-  }
+  grantbuffer.io.pop <> io.gb_pop
+  io.gb_beat <> grantbuffer.io.beat
 }
