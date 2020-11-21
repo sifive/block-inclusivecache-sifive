@@ -22,7 +22,6 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 import MetaData._
-import freechips.rocketchip.util.DescribedSRAM
 
 class DirectoryEntry(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
@@ -98,12 +97,9 @@ class Directory(params: InclusiveCacheParameters) extends Module
 
   val codeBits = new DirectoryEntry(params).getWidth
 
-  val (cc_dir, omSRAM) =  DescribedSRAM(
-    name = "cc_dir",
-    desc = "Directory RAM",
-    size = params.cache.sets,
-    data = Vec(params.cache.ways, UInt(width = codeBits))
-  )
+  val singlePort = true
+  val cc_dir = Module(new SRAMTemplate(UInt(width = codeBits), set=params.cache.sets, way=params.cache.ways,
+    shouldReset=false, holdRead=false, singlePort=singlePort))
 
   val write = Queue(io.write, 1) // must inspect contents => max size 1
   // a flow Q creates a WaR hazard... this MIGHT not cause a problem
@@ -126,13 +122,15 @@ class Directory(params: InclusiveCacheParameters) extends Module
 
   require (codeBits <= 256)
 
+  // 我们使用的是单口的SRAM
+  // 不能同时读和写
+  // 这里是让读优先的
   write.ready := !io.read.valid
-  when (!ren && wen) {
-    cc_dir.write(
-      Mux(wipeDone, write.bits.set, wipeSet),
-      Vec.fill(params.cache.ways) { Mux(wipeDone, write.bits.data.asUInt, UInt(0)) },
-      UIntToOH(write.bits.way, params.cache.ways).asBools.map(_ || !wipeDone))
-  }
+  cc_dir.io.w.req.valid := !ren && wen
+  cc_dir.io.w.req.bits.apply(
+    setIdx=Mux(wipeDone, write.bits.set, wipeSet),
+    data=Mux(wipeDone, write.bits.data.asUInt, UInt(0)),
+    waymask=UIntToOH(write.bits.way, params.cache.ways) | Fill(params.cache.ways, !wipeDone))
 
   val ren1 = RegInit(Bool(false))
   val ren2 = if (params.micro.dirReg) RegInit(Bool(false)) else ren1
@@ -141,7 +139,11 @@ class Directory(params: InclusiveCacheParameters) extends Module
 
   val bypass_valid = params.dirReg(write.valid)
   val bypass = params.dirReg(write.bits, ren1 && write.valid)
-  val regout = params.dirReg(cc_dir.read(io.read.bits.set, ren), ren1)
+
+  cc_dir.io.r.req.valid := ren
+  cc_dir.io.r.req.bits.apply(setIdx=io.read.bits.set)
+  val regout = params.dirReg(cc_dir.io.r.resp.data, ren1)
+
   val tag = params.dirReg(RegEnable(io.read.bits.tag, ren), ren1)
   val set = params.dirReg(RegEnable(io.read.bits.set, ren), ren1)
 
@@ -175,5 +177,5 @@ class Directory(params: InclusiveCacheParameters) extends Module
   params.ccover(ren2 && setQuash && tagMatch, "DIRECTORY_HIT_BYPASS", "Bypassing write to a directory hit")
   params.ccover(ren2 && setQuash && !tagMatch && wayMatch, "DIRECTORY_EVICT_BYPASS", "Bypassing a write to a directory eviction")
 
-  def json: String = s"""{"clients":${params.clientBits},"mem":"${cc_dir.pathName}","clean":"${wipeDone.pathName}"}"""
+  def json: String = s"""{"clients":${params.clientBits},"mem":"cc_dir","clean":"${wipeDone.pathName}"}"""
 }

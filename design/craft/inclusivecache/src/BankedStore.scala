@@ -21,7 +21,6 @@ import Chisel._
 import freechips.rocketchip.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
-import freechips.rocketchip.util.DescribedSRAM
 
 import scala.math.{max, min}
 
@@ -86,15 +85,13 @@ class BankedStore(params: InclusiveCacheParameters) extends Module
   val numBanks = rowBytes / params.micro.writeBytes
   val codeBits = 8*params.micro.writeBytes
 
+  val singlePort = true
   val cc_banks = Seq.tabulate(numBanks) {
     i =>
-      DescribedSRAM(
-        name = s"cc_banks_$i",
-        desc = "Banked Store",
-        size = rowEntries,
-        data = UInt(width = codeBits)
-      )
+      Module(new SRAMTemplate(UInt(width = codeBits), set=rowEntries, way=1,
+        shouldReset=false, holdRead=false, singlePort=singlePort))
   }
+
   // These constraints apply on the port priorities:
   //  sourceC > sinkD     outgoing Release > incoming Grant      (we start eviction+refill concurrently)
   //  sinkC > sourceC     incoming ProbeAck > outgoing ProbeAck  (we delay probeack writeback by 1 cycle for QoR)
@@ -167,15 +164,22 @@ class BankedStore(params: InclusiveCacheParameters) extends Module
     req.bankSel | sum
   }
   // Access the banks
-  val regout = Vec(cc_banks.zipWithIndex.map { case ((b, omSRAM), i) =>
+  val regout = Vec(cc_banks.zipWithIndex.map { case (b, i) =>
     val en  = reqs.map(_.bankEn(i)).reduce(_||_)
     val sel = reqs.map(_.bankSel(i))
     val wen = PriorityMux(sel, reqs.map(_.wen))
     val idx = PriorityMux(sel, reqs.map(_.index))
     val data= PriorityMux(sel, reqs.map(_.data(i)))
 
-    when (wen && en) { b.write(idx, data) }
-    RegEnable(b.read(idx, !wen && en), RegNext(!wen && en))
+    b.io.w.req.valid := wen && en
+    b.io.w.req.bits.apply(
+      setIdx=idx,
+      data=data,
+      waymask=1.U)
+
+    b.io.r.req.valid := !wen && en
+    b.io.r.req.bits.apply(setIdx=idx)
+    RegEnable(b.io.r.resp.data(0), RegNext(!wen && en))
   })
 
   val regsel_sourceC = RegNext(RegNext(sourceC_req.bankEn))
@@ -194,6 +198,6 @@ class BankedStore(params: InclusiveCacheParameters) extends Module
 
   io.sourceD_rdat.data := Cat(decodeD.reverse)
 
-  private def banks = cc_banks.map("\"" + _._1.pathName + "\"").mkString(",")
+  private def banks = cc_banks.zipWithIndex.map{ case (_, i) => "\"" + s"cc_banks_$i" + "\"" }.mkString(",")
   def json: String = s"""{"widthBytes":${params.micro.writeBytes},"mem":[${banks}]}"""
 }
