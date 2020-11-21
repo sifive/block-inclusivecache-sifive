@@ -374,6 +374,7 @@ class SourceD(params: InclusiveCacheParameters) extends Module with HasTLDump
 
   io.gnt_pop.valid := s2_valid_pb && s2_req.prio(0) && s2_uncached_get
   io.gnt_pop.bits.index := s2_req.put
+  io.gnt_pop.bits.beat  := s2_beat
   io.gnt_pop.bits.last  := s2_last
 
   io.rel_pop.valid := s2_valid_pb && !s2_req.prio(0)
