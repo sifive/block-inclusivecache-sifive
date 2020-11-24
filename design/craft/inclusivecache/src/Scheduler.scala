@@ -33,6 +33,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
     // Control port
     val req = Decoupled(new SinkXRequest(params)).flip
     val resp = Decoupled(new SourceXRequest(params))
+    val prefetcher = new PrefetcherIO(params.inner.bundle.addressBits)
   }
 
   val sourceA = Module(new SourceA(params))
@@ -130,6 +131,27 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // c mshr是倒数第一项
   val c_mshr = mshrs.last
   val nestedwb = Wire(new NestedWriteback(params))
+
+  // connect prefetcher feedback ports
+  // Acquire
+  val prefetcherAcquire_arb = Module(new Arbiter(new PrefetcherAcquire(params.inner.bundle.addressBits), params.mshrs))
+  io.prefetcher.acquire.valid := prefetcherAcquire_arb.io.out.valid
+  io.prefetcher.acquire.bits  := prefetcherAcquire_arb.io.out.bits
+  prefetcherAcquire_arb.io.out.ready := true.B
+  mshrs.zipWithIndex.foreach { case (m, i) =>
+    prefetcherAcquire_arb.io.in(i).valid := m.io.prefetcherAcquire.valid
+    prefetcherAcquire_arb.io.in(i).bits  := m.io.prefetcherAcquire.bits
+  }
+
+  val validVec = Vec(mshrs map { case m => m.io.prefetcherAcquire.valid })
+  assert(PopCount(validVec) <= 1.U)
+
+  // Release
+  val releaseReq = sourceC.io.req.bits
+  // if we drop this block, we should inform prefetcher
+  // we can not catch silent drop of B-state block
+  io.prefetcher.release.valid   := sourceC.io.req.fire() && (releaseReq.param === TLPermissions.BtoN || releaseReq.param === TLPermissions.TtoN)
+  io.prefetcher.release.bits.address := params.expandAddress(releaseReq.tag, releaseReq.set, UInt(0))
 
   // 这边的valid怎么就直接过来了呢？
   // Deliver messages from Sinks to MSHRs
