@@ -106,6 +106,8 @@ class InclusiveCache(
     beatBytes   = c.beatBytes)}
 
   lazy val module = new LazyModuleImp(this) {
+    val PAddrBits = 40
+    val io = IO(new PrefetcherIO(PAddrBits))
 
     // If you have a control port, you must have at least one cache port
     require (!ctlnode.isDefined || !node.edges.in.isEmpty)
@@ -221,6 +223,13 @@ class InclusiveCache(
 
       scheduler
     }
+
+    // for now, we have only one prefetcher feedback port
+    // and now, to simplify implementation
+    // we do not want prefetcher feedback port to back pressure L2
+    // so we can have only one scheduler
+    require(mods.length == 1)
+    io <> mods(0).io.prefetcher
 
     def json = s"""{"banks":[${mods.map(_.json).mkString(",")}]"""
   }

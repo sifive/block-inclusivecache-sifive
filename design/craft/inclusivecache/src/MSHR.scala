@@ -25,6 +25,27 @@ import TLPermissions._
 import TLMessages._
 import MetaData._
 
+class PrefetcherAcquire(addressBits: Int) extends Bundle
+{
+  val address = UInt(width = addressBits)
+  val write   = Bool() // read or write
+  val hit     = Bool()
+  override def cloneType = (new PrefetcherAcquire(addressBits)).asInstanceOf[this.type]
+}
+
+class PrefetcherRelease(addressBits: Int) extends Bundle
+{
+  val address = UInt(width = addressBits)
+  override def cloneType = (new PrefetcherRelease(addressBits)).asInstanceOf[this.type]
+}
+
+class PrefetcherIO(addressBits: Int) extends Bundle
+{
+  val acquire = Valid(new PrefetcherAcquire(addressBits))
+  val release = Valid(new PrefetcherRelease(addressBits))
+  override def cloneType = (new PrefetcherIO(addressBits)).asInstanceOf[this.type]
+}
+
 // 这些似乎是对外的一些接口
 class ScheduleRequest(params: InclusiveCacheParameters) extends InclusiveCacheBundle(params)
 {
@@ -141,6 +162,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     val sinke     = Valid(new SinkEResponse(params)).flip
     val nestedwb  = new NestedWriteback(params).flip
     val mshr_id   = Input(UInt())
+    val prefetcherAcquire = Valid(new PrefetcherAcquire(params.inner.bundle.addressBits))
   }
 
   when (io.allocate.valid) {
@@ -513,8 +535,8 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.schedule.bits.d.bits.uncached_get := uncached_get
   io.schedule.bits.e.bits.sink    := sink
   io.schedule.bits.x.bits.fail    := Bool(false)
-  // 当directory write时，如果是release和probeAck，invalid？那这也不对啊？
-  // 所以probeAck的meta data到底是啥时候写的啊。
+  // 如果我们是release的话，我们就直接变成invalid
+  // 如果是其他的话，就变写final_meta_writeback
   io.schedule.bits.dir.bits.set   := request.set
   io.schedule.bits.dir.bits.way   := meta.way
   io.schedule.bits.dir.bits.data  := Mux(!s_release, invalid, Wire(new DirectoryEntry(params), init = final_meta_writeback))
@@ -804,7 +826,19 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   // 那看来这里的的execution plan，总共就这些了
   // 所有的行为估计都是根据这些变量来的？
   // 我感觉可以打印一下来看看执行流程？
+  io.prefetcherAcquire.valid := Bool(false)
+  io.prefetcherAcquire.bits.address       := 0.U
+  io.prefetcherAcquire.bits.write         := Bool(false)
+  io.prefetcherAcquire.bits.hit           := Bool(false)
   when (io.directory.valid || (io.allocate.valid && io.allocate.bits.repeat)) {
+    val dcacheRead = new_request.opcode === TLMessages.AcquireBlock && new_request.param === TLPermissions.NtoB
+    val dcacheWrite = (new_request.opcode === TLMessages.AcquireBlock || new_request.opcode === TLMessages.AcquirePerm) && (new_request.param === TLPermissions.NtoT || new_request.param === TLPermissions.BtoT)
+
+    io.prefetcherAcquire.valid := dcacheRead || dcacheWrite
+    io.prefetcherAcquire.bits.address       := params.expandAddress(new_request.tag, new_request.set, UInt(0))
+    io.prefetcherAcquire.bits.write         := dcacheWrite
+    io.prefetcherAcquire.bits.hit           := new_meta.hit
+
     meta_valid := Bool(true)
     meta := new_meta
     probes_done := UInt(0)
