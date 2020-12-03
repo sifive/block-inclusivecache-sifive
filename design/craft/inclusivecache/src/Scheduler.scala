@@ -270,6 +270,8 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // 每个人可以喝说自己这个mshr是否要block
   // 估计prio就是priority？
   // X和A显然是最低的，B次之，C最高？
+  // 当setMatches真的有match时，blockB和blockC的值才是defined，假如没有match，值就是not defined
+  // 在那种情况下，是alloc，是分配普通的MSHR。不会分配特殊的MSHR。
   val blockB = Mux1H(setMatches, mshrs.map(_.io.status.bits.blockB)) && request.bits.prio(1)
   val blockC = Mux1H(setMatches, mshrs.map(_.io.status.bits.blockC)) && request.bits.prio(2)
 
@@ -300,6 +302,10 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   // A请求不能阻塞B，是显然的，典型的例子就是
   // 可能blockB，nestC的意思是，它们现在支持B或者C进来？
   // block和nest估计是低位有效，还有问题就是当nest时，inter lock是怎样lock的呢？
+  // 如果支持nestB或者nestC，那显然就不用暂时queue起来了
+  // 如果blockB是true，就意味着有人要block它。
+  // 为什么有人要block它，它也进不了queue呢？
+  // 那估计这边的block就是挂在总线上不拿下来的意思？
   val queue = lowerMatches.orR() && !nestB && !nestC && !blockB && !blockC
 
   if (!params.lastLevel) {

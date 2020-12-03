@@ -307,13 +307,18 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   io.status.bits.set    := request.set
   io.status.bits.tag    := request.tag
   io.status.bits.way    := meta.way
-  // 估计block是低位有效的？
-  // 当meta invalid时，blockB是true？
-  // 当blockB是true时，就是不block？
+  // blockB是高有效
+  // 当blockB是true时，就是block
+  // 即在这个case下block: !meta_valid || ((!w_releaseack || !w_rprobeacklast || !w_pprobeacklast) && !w_grantfirst)
+  // meta_valid时block，这个是时候估计是request valid，但是meta还没valid？
+  // 当meta valid时，另外就是release，probe，grant没有完成时，要block
+  // 在scheduler里面，blockB似乎没在几个地方用到过啊？
+  // 不是应该直接不允许nestB就OK了吗？为啥还要blockB呢？why？
   io.status.bits.blockB := !meta_valid || ((!w_releaseack || !w_rprobeacklast || !w_pprobeacklast) && !w_grantfirst)
-  // nestB估计也是0有效，即0时，允许nest
-  // 1时不允许nest
-  // 那看看这边的条件，应该是在这样的条件下不允许nest
+
+  // nestB应该是1时才允许nest
+  // 当meta not valid时，就是没有请求，那自然也不需要nest
+  // 当meta valid，并且release，probe流程都走完了，就差收到外面的grant请求时，才允许nest。
   io.status.bits.nestB  := meta_valid && w_releaseack && w_rprobeacklast && w_pprobeacklast && !w_grantfirst
   // The above rules ensure we will block and not nest an outer probe while still doing our
   // own inner probes. Thus every probe wakes exactly one MSHR.
