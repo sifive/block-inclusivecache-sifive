@@ -411,18 +411,25 @@ class MSHR(params: InclusiveCacheParameters) extends Module
     final_meta_writeback.clients := meta.clients & ~Mux(isToN(request.param), req_clientBit, UInt(0))
     final_meta_writeback.hit     := Bool(true) // chained requests are hits
   } .elsewhen (request.prio(1) && Bool(!params.lastLevel)) { // probe
+    // 只有降权限才需要修改meta
     // 如果是cap permission，那不用修改meta
+    // 同时，如果是降权限，则说明肯定是hit的。
+    // 因为假如miss了，没有这个块儿，那不管probe啥，肯定都不是降权限。
     when (outer_probe_shrink_permission) {
       // 对于shrinkPermission肯定是toB或者toN，肯定是变成clean的
       final_meta_writeback.dirty   := Bool(false)
       final_meta_writeback.state   := Mux(outer_probe_toB, BRANCH, INVALID)
-      // 如果变成N了，肯定是没有client的
-      // 如果是toB的话，只有可能是从trunk或者tip toB
-      // 只有trunk的toB，要看client的probeAck是不是toN，来更新client
-      // tip的不用改client
       when (outer_probe_toN) {
+        // 如果变成N了，肯定是没有client的
         final_meta_writeback.clients := UInt(0)
+        // 同时要把hit给改成false
+        // 以应对后面的chained request
+        final_meta_writeback.hit := Bool(false)
       } .elsewhen (outer_probe_toB && meta.state === TRUNK) {
+        // 如果是toB的话，只有可能是从trunk或者tip toB
+        // 只有trunk的toB，要看client的probeAck是不是toN，来更新client
+        // tip的不用改client
+        // trunk和tip也不用改hit
         final_meta_writeback.clients := meta.clients & ~probes_toN
       }
     }
