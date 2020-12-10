@@ -144,7 +144,7 @@ class Scheduler(params: InclusiveCacheParameters) extends Module with HasTLDump
   }
 
   val validVec = Vec(mshrs map { case m => m.io.prefetcherAcquire.valid })
-  assert(PopCount(validVec) <= 1.U)
+  // assert(PopCount(validVec) <= 1.U)
 
   // Release
   val releaseReq = sourceC.io.req.bits
