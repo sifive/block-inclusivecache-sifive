@@ -222,7 +222,7 @@ class InclusiveCache(
       scheduler
     }
 
-    def json = s"""{"banks":[${mods.map(_.json).mkString(",")}]"""
+    def json = s"""{"banks":[${mods.map(_.json).mkString(",")}]}"""
   }
 
   def logicalTreeNode: InclusiveCacheLogicalTreeNode = new InclusiveCacheLogicalTreeNode(
