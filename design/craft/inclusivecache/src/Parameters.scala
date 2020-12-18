@@ -149,7 +149,7 @@ case class InclusiveCacheParameters(
   }
 
   // If we are the first level cache, we do not need to support inner-BCE
-  val firstLevel = !inner.client.clients.exists(_.supportsProbe)
+  val firstLevel = !inner.client.clients.exists(_.supports.probe)
   // If we are the last level cache, we do not need to support outer-B
   val lastLevel = !outer.manager.managers.exists(_.regionType > RegionType.UNCACHED)
   require (lastLevel)
@@ -173,7 +173,7 @@ case class InclusiveCacheParameters(
   // println(s"addresses: ${flatAddresses} => ${pickMask} => ${addressBits}")
 
   val allClients = inner.client.clients.size
-  val clientBitsRaw = inner.client.clients.filter(_.supportsProbe).size
+  val clientBitsRaw = inner.client.clients.filter(_.supports.probe).size
   val clientBits = max(1, clientBitsRaw)
   val stateBits = 2
 
@@ -195,7 +195,7 @@ case class InclusiveCacheParameters(
     if (clientBitsRaw == 0) {
       UInt(0)
     } else {
-      Cat(inner.client.clients.filter(_.supportsProbe).map(_.sourceId.contains(source)).reverse)
+      Cat(inner.client.clients.filter(_.supports.probe).map(_.sourceId.contains(source)).reverse)
     }
   }
 
@@ -203,7 +203,7 @@ case class InclusiveCacheParameters(
     if (clientBitsRaw == 0) {
       UInt(0)
     } else {
-      Mux1H(bit, inner.client.clients.filter(_.supportsProbe).map(c => UInt(c.sourceId.start)))
+      Mux1H(bit, inner.client.clients.filter(_.supports.probe).map(c => UInt(c.sourceId.start)))
     }
   }
 
