@@ -44,19 +44,18 @@ case class InclusiveCacheParams(
 case object InclusiveCacheKey extends Field[InclusiveCacheParams]
 
 class WithInclusiveCache(
-  nBanks: Int = 1,
   nWays: Int = 8,
   capacityKB: Int = 512,
   outerLatencyCycles: Int = 40,
   subBankingFactor: Int = 4
 ) extends Config((site, here, up) => {
   case InclusiveCacheKey => InclusiveCacheParams(
-      sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * nBanks),
+      sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * up(BankedL2Key, site).nBanks),
       ways = nWays,
       memCycles = outerLatencyCycles,
       writeBytes = site(XLen)/8,
       portFactor = subBankingFactor)
-  case BankedL2Key => up(BankedL2Key, site).copy(nBanks = nBanks, coherenceManager = { context =>
+  case BankedL2Key => up(BankedL2Key, site).copy(coherenceManager = { context =>
     implicit val p = context.p
     val sbus = context.tlBusWrapperLocationMap(SBUS)
     val cbus = context.tlBusWrapperLocationMap.lift(CBUS).getOrElse(sbus)
