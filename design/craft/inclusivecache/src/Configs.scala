@@ -34,6 +34,7 @@ case class InclusiveCacheParams(
   portFactor: Int, // numSubBanks = (widest TL port * portFactor) / writeBytes
   memCycles: Int,  // # of L2 clock cycles for a memory round-trip (50ns @ 800MHz)
   physicalFilter: Option[PhysicalFilterParams] = None,
+  hintsSkipProbe: Boolean = false, // do hints probe the same client
   // Interior/Exterior refer to placement either inside the Scheduler or outside it
   // Inner/Outer refer to buffers on the front (towards cores) or back (towards DDR) of the L2
   bufInnerInterior: InclusiveCachePortParameters = InclusiveCachePortParameters.fullC,
@@ -48,7 +49,8 @@ class WithInclusiveCache(
   nWays: Int = 8,
   capacityKB: Int = 512,
   outerLatencyCycles: Int = 40,
-  subBankingFactor: Int = 4
+  subBankingFactor: Int = 4,
+  hintsSkipProbe: Boolean = false
 ) extends Config((site, here, up) => {
   case InclusiveCacheKey => InclusiveCacheParams(
       sets = (capacityKB * 1024)/(site(CacheBlockBytes) * nWays * nBanks),
@@ -67,6 +69,7 @@ class WithInclusiveCache(
       portFactor,
       memCycles,
       physicalFilter,
+      hintsSkipProbe,
       bufInnerInterior,
       bufInnerExterior,
       bufOuterInterior,
@@ -78,7 +81,8 @@ class WithInclusiveCache(
         ways = ways,
         sets = sets,
         blockBytes = sbus.blockBytes,
-        beatBytes = sbus.beatBytes),
+        beatBytes = sbus.beatBytes,
+        hintsSkipProbe = hintsSkipProbe),
       InclusiveCacheMicroParameters(
         writeBytes = writeBytes,
         portFactor = portFactor,

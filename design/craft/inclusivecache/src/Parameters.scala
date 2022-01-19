@@ -31,7 +31,8 @@ case class CacheParameters(
   ways:        Int,
   sets:        Int,
   blockBytes:  Int,
-  beatBytes:   Int) // inner
+  beatBytes:   Int, // inner
+  hintsSkipProbe: Boolean)
 {
   require (ways > 0)
   require (sets > 0)
@@ -267,12 +268,12 @@ object MetaData
     ((opcode === TLMessages.AcquireBlock || opcode === TLMessages.AcquirePerm) && param =/= TLPermissions.NtoB)
   }
   // Does a request prove the client need not be probed?
-  def skipProbeN(opcode: UInt): Bool = {
+  def skipProbeN(opcode: UInt, hintsSkipProbe: Boolean): Bool = {
     // Acquire(toB) and Get => is N, so no probe
     // Acquire(*toT) => is N or B, but need T, so no probe
     // Hint => could be anything, so probe IS needed
     // Put* => is N or B, so probe IS needed
-    opcode === TLMessages.AcquireBlock || opcode === TLMessages.AcquirePerm || opcode === TLMessages.Get
+    opcode === TLMessages.AcquireBlock || opcode === TLMessages.AcquirePerm || opcode === TLMessages.Get || (opcode === TLMessages.Hint && hintsSkipProbe.B)
   }
   def isToN(param: UInt): Bool = {
     param === TLPermissions.TtoN || param === TLPermissions.BtoN || param === TLPermissions.NtoN

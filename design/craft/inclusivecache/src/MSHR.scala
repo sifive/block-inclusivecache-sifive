@@ -273,7 +273,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val honour_BtoT = meta.hit && (meta.clients & req_clientBit).orR
 
   // The client asking us to act is proof they don't have permissions.
-  val excluded_client = Mux(meta.hit && request.prio(0) && skipProbeN(request.opcode), req_clientBit, UInt(0))
+  val excluded_client = Mux(meta.hit && request.prio(0) && skipProbeN(request.opcode, params.cache.hintsSkipProbe), req_clientBit, UInt(0))
   io.schedule.bits.a.bits.tag     := request.tag
   io.schedule.bits.a.bits.set     := request.set
   io.schedule.bits.a.bits.param   := Mux(req_needT, Mux(meta.hit, BtoT, NtoT), NtoB)
@@ -503,7 +503,7 @@ class MSHR(params: InclusiveCacheParameters) extends Module
   val new_request = Mux(io.allocate.valid, allocate_as_full, request)
   val new_needT = needT(new_request.opcode, new_request.param)
   val new_clientBit = params.clientBit(new_request.source)
-  val new_skipProbe = Mux(skipProbeN(new_request.opcode), new_clientBit, UInt(0))
+  val new_skipProbe = Mux(skipProbeN(new_request.opcode, params.cache.hintsSkipProbe), new_clientBit, UInt(0))
 
   val prior = cacheState(final_meta_writeback, Bool(true))
   def bypass(from: CacheState, cover: Boolean)(implicit sourceInfo: SourceInfo) {
