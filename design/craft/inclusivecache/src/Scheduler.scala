@@ -337,5 +337,4 @@ class Scheduler(params: InclusiveCacheParameters) extends Module
   private def setBits = params.addressMapping.drop(params.offsetBits).take(params.setBits).mkString(",")
   private def tagBits = params.addressMapping.drop(params.offsetBits + params.setBits).take(params.tagBits).mkString(",")
   private def simple = s""""reset":"${reset.pathName}","tagBits":[${tagBits}],"setBits":[${setBits}],"blockBytes":${params.cache.blockBytes},"ways":${params.cache.ways}"""
-  def json: String = s"""{"addresses":[${addresses}],${simple},"directory":${directory.json},"subbanks":${bankedStore.json}}"""
 }

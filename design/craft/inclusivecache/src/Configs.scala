@@ -88,8 +88,6 @@ class WithInclusiveCache(
         address = InclusiveCacheParameters.L2ControlAddress,
         beatBytes = cbus.beatBytes))))
 
-    context.addLogicalTreeNode(l2.logicalTreeNode)
-
     def skipMMIO(x: TLClientParameters) = {
       val dcacheMMIO =
         x.requestFifo &&
@@ -127,7 +125,6 @@ class WithInclusiveCache(
       _ := cbus.coupleTo("l2_ctrl") { TLBuffer(1) := TLFragmenter(cbus) := _ }
     }
 
-    ElaborationArtefacts.add("l2.json", l2.module.json)
     (filter.node, lastLevelNode, None)
   })
 })
