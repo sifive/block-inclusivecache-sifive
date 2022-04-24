@@ -18,11 +18,11 @@
 package sifive.blocks.inclusivecache
 
 import Chisel._
-import diplomaticobjectmodel.model.OMCacheMaster
+
 import freechips.rocketchip.config._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.InclusiveCacheLogicalTreeNode
-import freechips.rocketchip.diplomaticobjectmodel.model.OMRegisterMap
+
+
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.subsystem.BankedL2Key
@@ -123,19 +123,6 @@ class InclusiveCache(
       println("")
     }
 
-    def getMasters(): Seq[OMCacheMaster] = {
-      // Use the natural ordering of clients (just like in Directory)
-      node.edges.in.headOption.map { n =>
-        n.client.clients.zipWithIndex.map {
-          case (c, i) =>
-            OMCacheMaster(
-              id = i,
-              documentationName = c.name
-            )
-        }
-      }.getOrElse(Nil)
-    }
-
     // Flush directive
     val flushInValid   = RegInit(Bool(false))
     val flushInReady   = Wire(init = Bool(false))
@@ -221,16 +208,5 @@ class InclusiveCache(
 
       scheduler
     }
-
-    def json = s"""{"banks":[${mods.map(_.json).mkString(",")}]"""
   }
-
-  def logicalTreeNode: InclusiveCacheLogicalTreeNode = new InclusiveCacheLogicalTreeNode(
-    device = device,
-    cache = cache,
-    micro = micro,
-    nBanks = p(BankedL2Key).nBanks,
-    node = node,
-    regMap = module.regmap
-  )
 }

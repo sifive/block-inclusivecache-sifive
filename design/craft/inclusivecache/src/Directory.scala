@@ -62,7 +62,7 @@ class Directory(params: InclusiveCacheParameters) extends Module
 
   val codeBits = new DirectoryEntry(params).getWidth
 
-  val (cc_dir, omSRAM) =  DescribedSRAM(
+  val cc_dir =  DescribedSRAM(
     name = "cc_dir",
     desc = "Directory RAM",
     size = params.cache.sets,
