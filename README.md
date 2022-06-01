@@ -12,4 +12,4 @@ It additionally supplies a SW-controlled interface for flusing cache blocks base
 The following parameters of the cache are easily `Config`-urable: 
 size, ways, banking and sub-banking factors, external bandwidth, network interface buffering.
 
-Stand-alone unit tests coming soon.
+Ongoing developent of this IP will take place at https://github.com/chipsalliance/rocket-chip-inclusive-cache
